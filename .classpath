@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
+	<classpathentry kind="con" path="org.dbpowder.plugins.LIB_CONTAINER/flat~fileSys/home/hc2008/Fiji.app/jars"/>
+	<classpathentry kind="con" path="org.dbpowder.plugins.LIB_CONTAINER/flat~fileSys/home/hc2008/Fiji.app/plugins"/>
+	<classpathentry kind="con" path="org.dbpowder.plugins.LIB_CONTAINER/flat~fileSys/home/hc2008/Image/newlib"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

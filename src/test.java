@@ -1,7 +1,9 @@
 import java.awt.Color;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 
 import ij.*;
 import ij.gui.Roi;
@@ -20,6 +22,8 @@ import mpicbg.imagefeatures.FloatArray2DSIFT;
 import sc.fiji.CMP_BIA.segmentation.structures.Labelling2D;
 import sc.fiji.CMP_BIA.segmentation.superpixels.*;
 
+
+
 public class test {
 	static int x = 1360;
 	static int y = 976;
@@ -28,18 +32,12 @@ public class test {
 		String path = "/home/hc2008/Image/image/klotho/EGFR-1/08-4888D1-N3.tif";
 		ImagePlus img2 = IJ.openImage(path);
 		img2.setRoi(0, 0, x, y);
-		//ImageProcessor ip2 = img2.getProcessor().crop();
 		ImagePlus img = cropImg(img2, 0, 0, x, y);
 		ImageProcessor ip = img.getProcessor();
 		img.show();
-		//ImageConverter ic = new ImageConverter(img);
-		//ic.convertToGray8();
-		FloatArray2DSIFT.Param param = new FloatArray2DSIFT.Param();
-		ArrayList<Feature> feat = new ArrayList<Feature>();
-		SIFT si = new SIFT(new FloatArray2DSIFT(param));
-		si.extractFeatures(ip, feat);
-		float[] f = new float[2];
-		int x, y;
+		
+		ArrayList<Feature> feat = doSift(ip);
+		
 		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
 		imgblank.show();
 		IJ.run("Make Binary","");
@@ -47,44 +45,97 @@ public class test {
 		ImageProcessor ipblank = imgblank.getProcessor();
 		ipblank.setColor(new Color(0));
 		
-		
+		int w = imgblank.getWidth();
+		int h = imgblank.getHeight();
+		float[] f = new float[2];
+		float g, s;
+		int x, y;
+		//int x1, y1;
+		//float[] d ;
+		//int dd;
 		long[] featD = new long[feat.size()];
+		int[] dia = new int[feat.size()];
 		for (int i = 0; i < feat.size(); i++){
 			 f = feat.get(i).location;
+			 g = feat.get(i).orientation;
+			 s = feat.get(i).scale;
+			 //d = feat.get(i).descriptor;
+			 //dd = (int) (10 * feat.get(i).descriptorDistance(feat.get(0)));
+			 //dd = (dd-1)*(dd-1);
+			 
+			 //float d1 = 0.0F;
+			 
+			 //for (int j = 0 ; j < d.length; j++){
+			//	 d1 += d[j] * d[j];
+			 //}
+			 
+			 //dd = (int)(10* Math.sqrt(d1));
+			 
 			 x = (int) f[0];
 			 y = (int) f[1];
-			 featD[i] = x*x + y*y;
-			 ipblank.drawPixel(x, y);
-
+			 featD[i] = (long) Math.sqrt(x*x + y*y);
+			 dia[i] = (int) featD[i];
+			 /*
+			 x1 = (int) (x + s * Math.cos((double) g));
+			 y1 = (int) (y + s * Math.sin((double) g));
+			 */
+			 if (s < 5.8) ipblank.drawPixel(x, y);
+			 //if (s < 5.8) ipblank.drawOval(x, y, 3, 3);
+			 //ipblank.drawLine(x, y, x1, y1);
+			 //if (s < 5.8) ipblank.drawString(Integer.toString(dd), x, y);
+			 //if (s < 5.8) ipblank.drawOval(x, y, dd, dd);
+				double xt = 100 * x/w;
+				double yt = 100 * y/h;
+				System.out.println ((int) Math.sqrt(xt*xt + yt*yt));
+				//ipblank.drawString(Integer.toString((int) Math.sqrt(xt*xt + yt*yt)), x, y);
 		}
-		imgblank.updateAndDraw();
-
+		//imgblank.updateAndDraw();
 		//imgblank.show();
 		
-		jSLIC js = new jSLIC(img);
-		js.process(30, 0.2F);
-		Labelling2D ld = js.getSegmentation();
-		ld.showOverlapROIs(img);
-		RoiManager rm = RoiManager.getInstance();
-		Roi[] rois = rm.getRoisAsArray();
+		Roi[] rois = doSlic(img, 30, 0.3F);
+		int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
 
-		int[] r;
-		int[] roisD = new int[rois.length];
-		for (int i = 0; i < rois.length; i++){
-			imgblank.setRoi(rois[i]);
-			ImageStatistics is = ipblank.getStatistics();
-			r = is.histogram;
-			roisD[i] =  r[255];
-			//ip.drawString(Integer.toString(roisD[i]), (int) is.xCentroid, (int) is.yCentroid);
-		}
-		
-		//img.updateAndDraw();
-		//img.show();
 		img.hide();
-		drawStringExceed(0, img, rois, roisD);
+		//drawStringExceed(0, img, rois, roisD);
+		RoiManager rm = RoiManager.getInstance();
 		rm.runCommand("Show All");
 		
+		Integer[][] td = new Integer[rois.length][2];
+
+
+		for (int i = 0; i < rois.length; i++){
+			td[i][0] = i;
+			double xp = 100 * rois[i].getFloatBounds().getCenterX()/w;
+			double yp = 100 * rois[i].getFloatBounds().getCenterY()/h;
+			td[i][1] = (int) (Math.sqrt(xp*xp + yp * yp));
+	
+		}
+		 
+		Arrays.sort(td, new Comparator<Integer[]>() {
+		    public int compare(Integer[] int1, Integer[] int2) {
+		        Integer numOfKeys1 = int1[1];
+		        Integer numOfKeys2 = int2[1];
+		        return numOfKeys1.compareTo(numOfKeys2);
+		    }
+		});
 		
+
+		for (int i = 0; i < rois.length; i++){
+			int x2 = (int) rois[i].getBounds().getCenterX();
+			int y2 = (int) rois[i].getBounds().getCenterY();
+			//System.out.print(td[i][0] + "\t");
+			//System.out.println(td[i][1] + "\t" + x2 + "\t" + y2);
+			for (int j = 0; j < dia.length; j++){
+				if (td[i][1] == dia[j]) ipblank.drawString(Integer.toString(dia[j]), x2, y2);
+			}
+			//ipblank.drawString(Integer.toString(td[i][1]), x2, y2);
+			//ipblank.drawLine(0, 0, x2, y2);
+		}
+		imgblank.updateAndDraw();
+		imgblank.show();
+		rm.runCommand("Show All");
+
+		/*
 		ArrayList <Integer> hi = new ArrayList <Integer>();
 		int[] hid = roisD;
 		Arrays.sort(hid);
@@ -97,12 +148,78 @@ public class test {
 			}
 		}
 		
-		
-		
+		/*
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img); //S.get(0) H, S.get(1) DAB, S.get(2) Other
+		ImagePlus S2 = S.get(2);
+		ImageProcessor S2p = S2.getProcessor();
+		S2p.setColor(255);
+		ArrayList<Feature> feat1 = doSift(S2p);
+		for (int i = 0; i < feat1.size(); i++){
+			 f = feat1.get(i).location;
+			 g = feat1.get(i).orientation;
+			 s = feat1.get(i).scale;
+			 
+			 x = (int) f[0];
+			 y = (int) f[1];
+			 featD[i] = x*x + y*y;
+			 
+			 x1 = (int) (x + s * Math.cos((double) g));
+			 y1 = (int) (y + s * Math.sin((double) g));
+			 
+			 ipblank.reset();
+			 ipblank.drawPixel(x, y);
+			 //if (s < 5.8) 
+			 //S2p.drawLine(x, y, x1, y1);
+			 //if (s < 6) 
+			 if (s > 4 && s < 8)	 ipblank.drawLine(x, y, x1, y1);
+		}
+		imgblank.updateAndDraw();
+		imgblank.show();
+		rm.runCommand("Show All");
 		
+		S2.show();
+		rm.runCommand("Show All");
+		*/
 		
+		//imgblank.close();
+		img.close();
+		
+		/*
+		double h,w;
+		int r;
+		for (int i = 0; i < rois.length; i++){
+			//ImageStatistics is = ipblank.getStatistics();
+			//System.out.println(i);
+			Rectangle rt = rois[i].getBounds();
+			h = rt.getHeight();
+			w = rt.getWidth();
+			r = (int) Math.round((float) 100*h/w);
+			if (r < 80 || r > 120) ipblank.drawString(Integer.toString(r), (int) rt.getCenterX(), (int) rt.getCenterY());	
+			
+		}
+		imgblank.updateAndDraw();
+		imgblank.show();
+		rm.runCommand("Show All");
+		*/		
+		System.out.println("OK");
+	}
+	public static ArrayList<Feature> doSift(ImageProcessor ip){
+		FloatArray2DSIFT.Param param = new FloatArray2DSIFT.Param();
+		ArrayList<Feature> feat = new ArrayList<Feature>();
+		SIFT si = new SIFT(new FloatArray2DSIFT(param));
+		si.extractFeatures(ip, feat);
+		return feat;
+	}
+	
+	public static Roi[] doSlic(ImagePlus img, int area, float fit){
+		jSLIC js = new jSLIC(img);
+		js.process(area, fit);
+		Labelling2D ld = js.getSegmentation();
+		ld.showOverlapROIs(img);
+		RoiManager rm = RoiManager.getInstance();
+		Roi[] rois = rm.getRoisAsArray();
+		return rois;
 	}
 	
 	public static ImagePlus cropImg(ImagePlus img2, int x0, int y0, int x1, int y1){
@@ -112,6 +229,18 @@ public class test {
 		BufferedImage croppedImage = ip2.getBufferedImage();
 		ImagePlus img = new ImagePlus("Original", croppedImage);
 		return(img);
+	}
+	
+	public static int[] countFeatureDotbyRoi (Roi[] rois, ImagePlus imgblank, ImageProcessor ipblank ){
+		int[] roisD = new int[rois.length];
+		int[] r;
+		for (int i = 0; i < rois.length; i++){
+			imgblank.setRoi(rois[i]);
+			ImageStatistics is = ipblank.getStatistics();
+			r = is.histogram;
+			roisD[i] =  r[255];
+		}
+		return roisD;
 	}
 	
 	public static Roi[] drawStringExceed(int d, ImagePlus img, Roi[] rois, int[] roisD){

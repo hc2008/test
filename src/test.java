@@ -93,7 +93,7 @@ public class test {
 		//imgblank.show();
 		
 		Roi[] rois = doSlic(img, 30, 0.3F);
-		int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
+		//int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
 
 		img.hide();
 		//drawStringExceed(0, img, rois, roisD);
@@ -101,38 +101,78 @@ public class test {
 		rm.runCommand("Show All");
 		
 		Integer[][] td = new Integer[rois.length][2];
-
-
+		Integer[][] sx = new Integer[rois.length][2];
+		Integer[][] sy = new Integer[rois.length][2];
+		
 		for (int i = 0; i < rois.length; i++){
 			td[i][0] = i;
+			sx[i][0] = i;
+			sy[i][0] = i;
 			double xp = 100 * rois[i].getFloatBounds().getCenterX()/w;
 			double yp = 100 * rois[i].getFloatBounds().getCenterY()/h;
 			td[i][1] = (int) (Math.sqrt(xp*xp + yp * yp));
-	
+			sx[i][1] = (int) rois[i].getBounds().getCenterX();
+			sy[i][1] = (int) rois[i].getBounds().getCenterY();
 		}
-		 
-		Arrays.sort(td, new Comparator<Integer[]>() {
-		    public int compare(Integer[] int1, Integer[] int2) {
-		        Integer numOfKeys1 = int1[1];
-		        Integer numOfKeys2 = int2[1];
-		        return numOfKeys1.compareTo(numOfKeys2);
-		    }
-		});
+				
+		td = sort2DInteger(td);
+		sx = sort2DInteger(sx);
+		sy = sort2DInteger(sy);
 		
-
-		for (int i = 0; i < rois.length; i++){
-			int x2 = (int) rois[i].getBounds().getCenterX();
-			int y2 = (int) rois[i].getBounds().getCenterY();
-			//System.out.print(td[i][0] + "\t");
-			//System.out.println(td[i][1] + "\t" + x2 + "\t" + y2);
-			for (int j = 0; j < dia.length; j++){
-				if (td[i][1] == dia[j]) ipblank.drawString(Integer.toString(dia[j]), x2, y2);
-			}
-			//ipblank.drawString(Integer.toString(td[i][1]), x2, y2);
-			//ipblank.drawLine(0, 0, x2, y2);
+		int[] featInRois = findFeatinRoi(feat, rois, sy);
+		for (int i = 0; i < featInRois.length; i++){
+			System.out.println(i + "\t" + featInRois[i]);
+			ipblank.drawString(Integer.toString(featInRois[i]), (int) feat.get(i).location[0], (int) feat.get(i).location[1]);
 		}
 		imgblank.updateAndDraw();
 		imgblank.show();
+		
+		/*
+		int[] featinRoi = new int[feat.size()];
+		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = -1;
+		for (int i = 0; i < feat.size(); i++){
+			
+			int xf = (int) feat.get(i).location[0];
+			int yf = (int) feat.get(i).location[1];
+			int start = 0;
+			int end = rois.length - 1;
+	
+			while (sy[start][1] <= (yf - 50)) {
+				start++;
+			}
+			
+			while (sy[end][1] >= (yf + 50)) {
+				end--;
+			}
+			
+			int[] t = new int[(end - start + 1)];
+			
+			for (int k = start; k <= end; k++){
+				t[(k - start)] = sy[k][0];
+			}
+			
+			int flag = 0;
+			for (int k = 0; k < t.length; k++){
+				if (rois[t[k]].contains(xf, yf)){ 
+					featinRoi[i] = t[k];
+					flag = 1;
+					}
+			}
+			
+			if (flag == 0) {
+				int r = 0;
+				while (r < rois.length){
+					if (rois[r].contains(xf, yf)){
+						featinRoi[i] = r;
+						break;
+					}
+					r++;
+				}
+			}
+		}
+		*/
+		//imgblank.show();
+
 		rm.runCommand("Show All");
 
 		/*
@@ -204,6 +244,58 @@ public class test {
 		*/		
 		System.out.println("OK");
 	}
+	
+	public static int[] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){
+		int[] featinRoi = new int[feat.size()];
+		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = -1;
+		for (int i = 0; i < feat.size(); i++){
+			
+			int xf = (int) feat.get(i).location[0];
+			int yf = (int) feat.get(i).location[1];
+			int start = 0;
+			int end = rois.length - 1;
+	
+			while (sy[start][1] <= (yf - 50)) {
+				start++;
+			}
+			
+			while (sy[end][1] >= (yf + 50)) {
+				end--;
+			}
+				
+			int flag = 0;
+			for (int k = start; k <=end ; k++){
+				if (rois[sy[k][0]].contains(xf, yf)){ 
+					featinRoi[i] = sy[k][0];
+					flag = 1;
+					}
+			}
+			
+			if (flag == 0) {
+				int r = 0;
+				while (r < rois.length){
+					if (rois[r].contains(xf, yf)){
+						featinRoi[i] = r;
+						break;
+					}
+					r++;
+				}
+			}
+		}
+		return featinRoi;
+	}
+	
+	public static Integer[][] sort2DInteger(Integer[][] data){
+		Arrays.sort(data, new Comparator<Integer[]>() {
+		    public int compare(Integer[] int1, Integer[] int2) {
+		        Integer numOfKeys1 = int1[1];
+		        Integer numOfKeys2 = int2[1];
+		        return numOfKeys1.compareTo(numOfKeys2);
+		    }
+		});
+		return data;
+	}
+	
 	public static ArrayList<Feature> doSift(ImageProcessor ip){
 		FloatArray2DSIFT.Param param = new FloatArray2DSIFT.Param();
 		ArrayList<Feature> feat = new ArrayList<Feature>();

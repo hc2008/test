@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 import ij.*;
 import ij.gui.Roi;
 import ij.measure.Measurements;
@@ -45,52 +47,11 @@ public class test {
 		ImageProcessor ipblank = imgblank.getProcessor();
 		ipblank.setColor(new Color(0));
 		
-		int w = imgblank.getWidth();
-		int h = imgblank.getHeight();
-		float[] f = new float[2];
-		float g, s;
-		int x, y;
-		//int x1, y1;
-		//float[] d ;
-		//int dd;
-		long[] featD = new long[feat.size()];
-		int[] dia = new int[feat.size()];
-		for (int i = 0; i < feat.size(); i++){
-			 f = feat.get(i).location;
-			 g = feat.get(i).orientation;
-			 s = feat.get(i).scale;
-			 //d = feat.get(i).descriptor;
-			 //dd = (int) (10 * feat.get(i).descriptorDistance(feat.get(0)));
-			 //dd = (dd-1)*(dd-1);
-			 
-			 //float d1 = 0.0F;
-			 
-			 //for (int j = 0 ; j < d.length; j++){
-			//	 d1 += d[j] * d[j];
-			 //}
-			 
-			 //dd = (int)(10* Math.sqrt(d1));
-			 
-			 x = (int) f[0];
-			 y = (int) f[1];
-			 featD[i] = (long) Math.sqrt(x*x + y*y);
-			 dia[i] = (int) featD[i];
-			 /*
-			 x1 = (int) (x + s * Math.cos((double) g));
-			 y1 = (int) (y + s * Math.sin((double) g));
-			 */
-			 if (s < 5.8) ipblank.drawPixel(x, y);
-			 //if (s < 5.8) ipblank.drawOval(x, y, 3, 3);
-			 //ipblank.drawLine(x, y, x1, y1);
-			 //if (s < 5.8) ipblank.drawString(Integer.toString(dd), x, y);
-			 //if (s < 5.8) ipblank.drawOval(x, y, dd, dd);
-				double xt = 100 * x/w;
-				double yt = 100 * y/h;
-				System.out.println ((int) Math.sqrt(xt*xt + yt*yt));
-				//ipblank.drawString(Integer.toString((int) Math.sqrt(xt*xt + yt*yt)), x, y);
-		}
-		//imgblank.updateAndDraw();
-		//imgblank.show();
+		ArrayList<Feature> nFeat = removeFeatbyScale(feat,5.8F);
+		for (int i = 0; i < nFeat.size(); i++) ipblank.drawPixel((int) nFeat.get(i).location[0], (int) nFeat.get(i).location[1]);
+		imgblank.updateAndDraw();
+		imgblank.show();
+		
 		
 		Roi[] rois = doSlic(img, 30, 0.3F);
 		//int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
@@ -100,77 +61,35 @@ public class test {
 		RoiManager rm = RoiManager.getInstance();
 		rm.runCommand("Show All");
 		
-		Integer[][] td = new Integer[rois.length][2];
+		
 		Integer[][] sx = new Integer[rois.length][2];
 		Integer[][] sy = new Integer[rois.length][2];
 		
 		for (int i = 0; i < rois.length; i++){
-			td[i][0] = i;
 			sx[i][0] = i;
 			sy[i][0] = i;
-			double xp = 100 * rois[i].getFloatBounds().getCenterX()/w;
-			double yp = 100 * rois[i].getFloatBounds().getCenterY()/h;
-			td[i][1] = (int) (Math.sqrt(xp*xp + yp * yp));
 			sx[i][1] = (int) rois[i].getBounds().getCenterX();
 			sy[i][1] = (int) rois[i].getBounds().getCenterY();
 		}
 				
-		td = sort2DInteger(td);
 		sx = sort2DInteger(sx);
 		sy = sort2DInteger(sy);
 		
-		int[] featInRois = findFeatinRoi(feat, rois, sy);
+		int[] featInRois = findFeatinRoi(nFeat, rois, sy);
+		
+
+		
 		for (int i = 0; i < featInRois.length; i++){
 			System.out.println(i + "\t" + featInRois[i]);
-			ipblank.drawString(Integer.toString(featInRois[i]), (int) feat.get(i).location[0], (int) feat.get(i).location[1]);
+			//ipblank.drawString(Integer.toString(featInRois[i]), (int) feat.get(i).location[0], (int) feat.get(i).location[1]);
 		}
-		imgblank.updateAndDraw();
-		imgblank.show();
 		
-		/*
-		int[] featinRoi = new int[feat.size()];
-		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = -1;
-		for (int i = 0; i < feat.size(); i++){
-			
-			int xf = (int) feat.get(i).location[0];
-			int yf = (int) feat.get(i).location[1];
-			int start = 0;
-			int end = rois.length - 1;
+		
 	
-			while (sy[start][1] <= (yf - 50)) {
-				start++;
-			}
-			
-			while (sy[end][1] >= (yf + 50)) {
-				end--;
-			}
-			
-			int[] t = new int[(end - start + 1)];
-			
-			for (int k = start; k <= end; k++){
-				t[(k - start)] = sy[k][0];
-			}
-			
-			int flag = 0;
-			for (int k = 0; k < t.length; k++){
-				if (rois[t[k]].contains(xf, yf)){ 
-					featinRoi[i] = t[k];
-					flag = 1;
-					}
-			}
-			
-			if (flag == 0) {
-				int r = 0;
-				while (r < rois.length){
-					if (rois[r].contains(xf, yf)){
-						featinRoi[i] = r;
-						break;
-					}
-					r++;
-				}
-			}
-		}
-		*/
+	
+		
+		
+	
 		//imgblank.show();
 
 		rm.runCommand("Show All");
@@ -242,7 +161,38 @@ public class test {
 		imgblank.show();
 		rm.runCommand("Show All");
 		*/		
-		System.out.println("OK");
+
+	}
+
+	public class featRoi{
+		private  ArrayList<Feature> array1;
+	    private int[] array2;
+	    public featRoi(ArrayList<Feature> array1, int[] array2)
+	    {
+	        this.array1 = array1;
+	        this.array2 = array2;
+
+	    }
+	    public ArrayList<Feature> getArray1() { return array1; }
+	    public int[] getArray2() { return array2; }
+
+	}
+	
+	public static ArrayList<Feature> removeFeatbyScale(ArrayList<Feature> feat, float crit){
+		ArrayList<Feature> tFeat = new ArrayList<Feature>();
+		for (int i = 0; i < feat.size(); i++) tFeat.add(feat.get(i));
+		
+		float s;
+		int[] ind = new int[tFeat.size()];
+		for (int i = 0; i < tFeat.size(); i++){
+			 s = tFeat.get(i).scale;
+			 if (s >= crit)  ind[i] = 1;
+		}
+		for (int i: ind){
+			if (i == 1) tFeat.remove(i);
+		}
+		return tFeat;
+		
 	}
 	
 	public static int[] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){

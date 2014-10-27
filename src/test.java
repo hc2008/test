@@ -3,6 +3,7 @@ import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -77,18 +78,55 @@ public class test {
 		
 		int[] featInRois = findFeatinRoi(nFeat, rois, sy);
 		
-
+		ArrayList<Integer> toRemove = new ArrayList<Integer>();
+		ArrayList<Feature> toRemoveFeature = new ArrayList<Feature>();
 		
 		for (int i = 0; i < featInRois.length; i++){
-			System.out.println(i + "\t" + featInRois[i]);
-			//ipblank.drawString(Integer.toString(featInRois[i]), (int) feat.get(i).location[0], (int) feat.get(i).location[1]);
+			if (featInRois[i] == -1) {
+				toRemove.add(i);
+				toRemoveFeature.add(nFeat.get(i));
+			}
 		}
 		
+		int[] toRemoveInt  = new int[toRemove.size()];
+		
+		for (int i = 0; i < toRemove.size(); i++) toRemoveInt[i] = toRemove.get(i);
+		nFeat.removeAll(toRemoveFeature);
+		featInRois = ArrayUtils.removeAll(featInRois, toRemoveInt);
+		ArrayList<Integer[]> rf = RoiContainingFeats(featInRois);
 		
 	
-	
 		
+		/*
+		Integer[][] FeatRois = new Integer[featInRois.length][2];
+		for (int i = 0; i < featInRois.length; i++) {
+			FeatRois[i][0] = i;
+			FeatRois[i][1] = featInRois[i];
+		}
 		
+		FeatRois = sort2DInteger(FeatRois);
+		
+		ArrayList<Integer[]> RoiContainFeat = new ArrayList<Integer[]>();
+		int temp = FeatRois[0][1];
+		ArrayList<Integer> feats = new ArrayList<Integer>();
+		feats.add(temp);
+		for (int i = 0; i < FeatRois.length; i++){
+			if (FeatRois[i][1] == temp){
+				feats.add(FeatRois[i][0]);
+			}else {
+				Integer[] t = new Integer[feats.size()];
+				for (int j = 0; j < feats.size(); j++) t[j] = feats.get(j);
+				RoiContainFeat.add(t);
+				feats.clear();
+				temp = FeatRois[i][1];
+				feats.add(temp);
+				feats.add(FeatRois[i][0]);
+			}
+			
+		}
+		*/
+		
+
 	
 		//imgblank.show();
 
@@ -163,19 +201,36 @@ public class test {
 		*/		
 
 	}
-
-	public class featRoi{
-		private  ArrayList<Feature> array1;
-	    private int[] array2;
-	    public featRoi(ArrayList<Feature> array1, int[] array2)
-	    {
-	        this.array1 = array1;
-	        this.array2 = array2;
-
-	    }
-	    public ArrayList<Feature> getArray1() { return array1; }
-	    public int[] getArray2() { return array2; }
-
+	
+	public static ArrayList<Integer[]> RoiContainingFeats(int[] featInRois){
+		Integer[][] FeatRois = new Integer[featInRois.length][2];
+		for (int i = 0; i < featInRois.length; i++) {
+			FeatRois[i][0] = i;
+			FeatRois[i][1] = featInRois[i];
+		}
+		
+		FeatRois = sort2DInteger(FeatRois);
+		
+		ArrayList<Integer[]> RoiContainFeat = new ArrayList<Integer[]>();
+		int temp = FeatRois[0][1];
+		ArrayList<Integer> feats = new ArrayList<Integer>();
+		feats.add(temp);
+		for (int i = 0; i < FeatRois.length; i++){
+			if (FeatRois[i][1] == temp){
+				feats.add(FeatRois[i][0]);
+			}else {
+				Integer[] t = new Integer[feats.size()];
+				for (int j = 0; j < feats.size(); j++) t[j] = feats.get(j);
+				RoiContainFeat.add(t);
+				feats.clear();
+				temp = FeatRois[i][1];
+				feats.add(temp);
+				feats.add(FeatRois[i][0]);
+			}
+			
+		}
+		
+		return RoiContainFeat;
 	}
 	
 	public static ArrayList<Feature> removeFeatbyScale(ArrayList<Feature> feat, float crit){

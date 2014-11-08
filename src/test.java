@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Comparator;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 
 import ij.*;
 import ij.gui.Roi;
@@ -48,21 +49,20 @@ public class test {
 		ImageProcessor ipblank = imgblank.getProcessor();
 		ipblank.setColor(new Color(0));
 		
-		ArrayList<Feature> nFeat = removeFeatbyScale(feat,5.8F);
+		ArrayList<Feature> nFeat = removeFeatbyScale(feat,5.0F);
 		for (int i = 0; i < nFeat.size(); i++) ipblank.drawPixel((int) nFeat.get(i).location[0], (int) nFeat.get(i).location[1]);
 		imgblank.updateAndDraw();
 		imgblank.show();
 		
 		
 		Roi[] rois = doSlic(img, 30, 0.3F);
-		//int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
-
+		int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
 		img.hide();
-		//drawStringExceed(0, img, rois, roisD);
+		rois = drawStringExceed(0, img, rois, roisD);
 		RoiManager rm = RoiManager.getInstance();
-		rm.runCommand("Show All");
-		
-		
+		rm.reset();
+		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
+
 		Integer[][] sx = new Integer[rois.length][2];
 		Integer[][] sy = new Integer[rois.length][2];
 		
@@ -76,6 +76,39 @@ public class test {
 		sx = sort2DInteger(sx);
 		sy = sort2DInteger(sy);
 		
+		ArrayList<Integer[]> nb = new ArrayList<Integer[]>(); 
+		for (int i = 0; i < rois.length; i++){
+			ArrayList<Integer> r = new ArrayList<Integer>();
+			Rectangle rc = rois[i].getBounds();
+			int maxX = (int) rc.getMaxX();
+			int maxY = (int) rc.getMaxY();
+			int minX = (int) rc.getMinX();
+			int minY = (int) rc.getMinY();
+			int cx = (int) rc.getCenterX();
+			int cy = (int) rc.getCenterY();
+			maxX = maxX + (int) Math.signum(img.getWidth() - maxX)*1;
+			maxY = maxX + (int) Math.signum(img.getWidth() - maxY)*1;
+			minX = minX + (int) Math.signum(minX - 0)*1;
+			minY = minY + (int) Math.signum(minX - 0)*1;
+			
+			int start = 0;
+			int end = rois.length - 1;
+	
+			while (sy[start][1] <= (cy - 100)) {
+				start++;
+			}
+			
+			while (sy[end][1] >= (cy + 100)) {
+				end--;
+			}
+			
+			
+						
+		}
+		
+		
+		
+		/*
 		int[] featInRois = findFeatinRoi(nFeat, rois, sy);
 		
 		ArrayList<Integer> toRemove = new ArrayList<Integer>();
@@ -95,6 +128,44 @@ public class test {
 		featInRois = ArrayUtils.removeAll(featInRois, toRemoveInt);
 		ArrayList<Integer[]> rf = RoiContainingFeats(featInRois);
 		
+		rm.setSelectedIndexes(toRemoveInt);
+		rm.runCommand("Delete");
+		rm.moveRoisToOverlay(img);
+		
+		//computeDescriptorInnerProduct(nFeat);
+		float[] ado = computeAverageDistancetoOthers(nFeat);
+		
+		
+		/*
+		for (int i = 0; i < rf.size(); i++){
+			SummaryStatistics ss = new SummaryStatistics();
+			Integer[] a = rf.get(i);
+			double[] s = new double[(a.length -1)*(a.length - 2)/2];
+			int c = 0;
+			/*
+			//if (a.length > 2){
+			for (int j = 1; j < a.length-1; j++){
+				for (int k = j+1; k < a.length; k++){
+					//s[c] = nFeat.get(a[j]).descriptorDistance(nFeat.get(a[k]));
+					double x1 = nFeat.get(a[j]).location[0];
+					double y1 = nFeat.get(a[j]).location[1];
+					double x2 = nFeat.get(a[k]).location[0];
+					double y2 = nFeat.get(a[k]).location[1];
+					ss.addValue(Math.sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)) *10);
+					//ss.addValue((double) s[c]);
+					c++;
+				}
+			}
+			
+			//ip.drawString(Integer.toString((int) Math.round(ss.getStandardDeviation()/ss.getMean()*10)), (int) rois[a[0]].getBounds().getCenterX(),(int) rois[a[0]].getBounds().getCenterY() );
+			ip.drawString(Integer.toString(a.length - 1), (int) rois[a[0]].getBounds().getCenterX(),(int) rois[a[0]].getBounds().getCenterY());
+			
+			//}
+		}
+			img.updateAndDraw();
+			img.show();
+			rm.runCommand("Show All");
+		*/
 	
 		
 		/*
@@ -180,7 +251,7 @@ public class test {
 		*/
 		
 		//imgblank.close();
-		img.close();
+		//img.close();
 		
 		/*
 		double h,w;
@@ -200,6 +271,33 @@ public class test {
 		rm.runCommand("Show All");
 		*/		
 
+	}
+	
+	public static float[] computeAverageDistancetoOthers(ArrayList<Feature> nFeat){
+		int[] t = new int[nFeat.size()];
+		float[] s = new float[nFeat.size()];
+		for (int k = 0; k < t.length; k++) t[k] = k;
+		for (int i = 0; i < nFeat.size(); i++){
+			int[] t1 = ArrayUtils.remove(t, i);
+			s[i] = 0;
+			for (int j = 0; j < t1.length; j++){
+				s[i] = s[i] + nFeat.get(j).descriptorDistance(nFeat.get(i));
+			}
+			s[i] = s[i]/t1.length;
+		}
+		return s;
+	}
+	
+	public static void computeDescriptorInnerProduct(ArrayList<Feature> nFeat){
+		for (int i = 0; i < nFeat.size(); i ++){
+			float[] d = nFeat.get(i).descriptor;
+			float s = 0;
+			for (int j = 0; j < d.length; j++){
+				s = s + d[j] * d[j];
+			}
+			s = (float) Math.sqrt(s/d.length);
+			System.out.println(i + "\t" + s);
+		}
 	}
 	
 	public static ArrayList<Integer[]> RoiContainingFeats(int[] featInRois){
@@ -235,17 +333,16 @@ public class test {
 	
 	public static ArrayList<Feature> removeFeatbyScale(ArrayList<Feature> feat, float crit){
 		ArrayList<Feature> tFeat = new ArrayList<Feature>();
+		ArrayList<Feature> pFeat = new ArrayList<Feature>();
 		for (int i = 0; i < feat.size(); i++) tFeat.add(feat.get(i));
 		
 		float s;
-		int[] ind = new int[tFeat.size()];
 		for (int i = 0; i < tFeat.size(); i++){
 			 s = tFeat.get(i).scale;
-			 if (s >= crit)  ind[i] = 1;
+			 if (s >= crit)  pFeat.add(tFeat.get(i));
 		}
-		for (int i: ind){
-			if (i == 1) tFeat.remove(i);
-		}
+		
+		tFeat.removeAll(pFeat);
 		return tFeat;
 		
 	}
@@ -345,7 +442,7 @@ public class test {
 		ImagePlus temp = img.duplicate();
 		temp.setTitle(Integer.toString(d));
 		ImageProcessor tp = temp.getProcessor();
-		tp.setColor(255);
+		tp.setColor(new Color(0,255,0));
 		for (int i = 0; i < rois.length; i++){
 			if (roisD[i] > d){
 			temp.setRoi(rois[i]);

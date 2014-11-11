@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Comparator;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 
 import ij.*;
@@ -58,55 +59,82 @@ public class test {
 		Roi[] rois = doSlic(img, 30, 0.3F);
 		int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
 		img.hide();
-		rois = drawStringExceed(0, img, rois, roisD);
+		rois = featureCountExceed(0, rois, roisD);
 		RoiManager rm = RoiManager.getInstance();
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 
-		Integer[][] sx = new Integer[rois.length][2];
+		//Integer[][] sx = new Integer[rois.length][2];
 		Integer[][] sy = new Integer[rois.length][2];
 		
 		for (int i = 0; i < rois.length; i++){
-			sx[i][0] = i;
+			//sx[i][0] = i;
 			sy[i][0] = i;
-			sx[i][1] = (int) rois[i].getBounds().getCenterX();
+			//sx[i][1] = (int) rois[i].getBounds().getCenterX();
 			sy[i][1] = (int) rois[i].getBounds().getCenterY();
 		}
 				
-		sx = sort2DInteger(sx);
+		//sx = sort2DInteger(sx);
 		sy = sort2DInteger(sy);
+
+		ArrayList<Integer[]> nb = findNB(img, sy, rois);
 		
-		ArrayList<Integer[]> nb = new ArrayList<Integer[]>(); 
-		for (int i = 0; i < rois.length; i++){
-			ArrayList<Integer> r = new ArrayList<Integer>();
-			Rectangle rc = rois[i].getBounds();
-			int maxX = (int) rc.getMaxX();
-			int maxY = (int) rc.getMaxY();
-			int minX = (int) rc.getMinX();
-			int minY = (int) rc.getMinY();
-			int cx = (int) rc.getCenterX();
-			int cy = (int) rc.getCenterY();
-			maxX = maxX + (int) Math.signum(img.getWidth() - maxX)*1;
-			maxY = maxX + (int) Math.signum(img.getWidth() - maxY)*1;
-			minX = minX + (int) Math.signum(minX - 0)*1;
-			minY = minY + (int) Math.signum(minX - 0)*1;
-			
-			int start = 0;
-			int end = rois.length - 1;
-	
-			while (sy[start][1] <= (cy - 100)) {
-				start++;
+		/*
+		ArrayList<Roi> roistemp = new ArrayList<Roi>();
+		ArrayList<Integer[]> nbtemp = new ArrayList<Integer[]>();
+		for (int i = 0; i < nb.size(); i++){
+			if (nb.get(i).length > 2) {
+				roistemp.add(rois[i]);
+				nbtemp.add(nb.get(i));
 			}
-			
-			while (sy[end][1] >= (cy + 100)) {
-				end--;
-			}
-			
-			
-						
 		}
 		
+		Roi[] rt = new Roi[roistemp.size()];
+		for (int i = 0; i < roistemp.size(); i++){
+			rt[i] = roistemp.get(i);
+		}
+		System.out.println(rois.length);
+		rois = rt;
+		nb = nbtemp;
+		System.out.println(nb.size());
+		System.out.println(rois.length);
+		rm.reset();
+		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
+		*/
 		
+		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
+		ArrayList<ImagePlus> S = cdr.run(img);
+		
+		ImagePlus DAB = S.get(1);
+		double[] densityDAB = measureDAB(DAB, rois);
+		
+		for (int i = 0; i < nb.size(); i++) System.out.println(i + "," + nb.get(i).length);
+		
+		DescriptiveStatistics ds = new DescriptiveStatistics();
+		double[] mdDAB = new double[rois.length];
+		for (int i = 0; i < rois.length; i++){
+			DescriptiveStatistics ds1= new DescriptiveStatistics();
+			Integer[] r = nb.get(i);
+			
+			//double sum = 0;
+			for (int j = 0; j < r.length; j++){
+				ds1.addValue(densityDAB[r[j]]);
+				//m = sum + densityDAB[r[j]];
+			}
+			mdDAB[i] = ds1.getMean();
+			//DAB[i] = sum/r.length;
+			ds.addValue(mdDAB[i]);
+			//System.out.println((i+1) + "," + (sum/r.length));
+		}
+		
+		double min = ds.getMin();
+		double max = ds.getMax();
+		for (int i = 0; i < rois.length; i++){
+		if (mdDAB[i] == min) System.out.println("min" + "," + (i+1));
+		if (mdDAB[i] == max) System.out.println("max" + "," + (i+1));
+		}
+		imgblank.hide();
+		img.show();
 		
 		/*
 		int[] featInRois = findFeatinRoi(nFeat, rois, sy);
@@ -273,6 +301,77 @@ public class test {
 
 	}
 	
+	public static double[] measureDAB(ImagePlus DAB, Roi[] rois){
+		int options = ImageStatistics.MEDIAN;
+		double[] densityDAB = new double[rois.length]; 
+		for (int i = 0; i < rois.length; i++){
+			ImageStatistics stats = new ImageStatistics();
+			DAB.setRoi(rois[i]);
+			stats = DAB.getStatistics(options);
+			densityDAB[i] = stats.median;
+		}
+		return densityDAB;
+	}
+	
+	public static ArrayList<Integer[]> findNB(ImagePlus img, Integer[][] sy, Roi[] rois){
+	        long startTime = System.nanoTime();
+	    	int options = ImageStatistics.MIN_MAX;
+	        ImageStatistics stats = new ImageStatistics();
+	        ArrayList<Integer[]> nb = new ArrayList<Integer[]>();
+	        int w = img.getWidth();
+	        int h = img.getHeight();
+	        for (int i = 0; i < rois.length; i++){
+	        	ImagePlus imgtemp = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
+	            ImageProcessor iptemp = imgtemp.getProcessor();
+	        	ArrayList<Integer> r = new ArrayList<Integer>();
+	            r.add(i);
+	            Rectangle rc = rois[i].getBounds();
+	            int maxX = (int) rc.getMaxX();
+	            int maxY = (int) rc.getMaxY();
+	            int minX = (int) rc.getMinX();
+	            int minY = (int) rc.getMinY();
+	            int cy = (int) rc.getCenterY();
+	            maxX = maxX + (int) Math.signum(w - maxX)*2;
+	            maxY = maxY + (int) Math.signum(h - maxY)*2;
+	            minX = minX - (int) Math.signum(minX - 0)*2;
+	            minY = minY - (int) Math.signum(minX - 0)*2;
+	            
+	            iptemp.drawRect(minX, minY, maxX - minX, maxY - minY);
+	            imgtemp.setRoi(rois[i]);
+	            iptemp.setColor(0);
+	            iptemp.fill();
+	             
+	            int start = 0;
+	            int end = rois.length - 1;
+	   
+	            while (sy[start][1] <= (cy - 100)) {
+	                start++;
+	            }
+	       
+	            while (sy[end][1] >= (cy + 100)) {
+	                end--;
+	            }
+	               
+	            for (int j= start; j <= end; j++){
+	               	imgtemp.setRoi(rois[sy[j][0]]);
+	        		stats = imgtemp.getStatistics(options);
+	        		if (stats.min == 0 & sy[j][0] != i)  r.add(sy[j][0]);
+	            }
+	           
+	            Integer[] ra = new Integer[r.size()];
+	            for (int j = 0; j < ra.length; j++) {
+	                ra[j] = r.get(j);
+	            }
+	            nb.add(ra);
+	            imgtemp.close();
+	            
+	        }
+	        
+	        long stopTime = System.nanoTime();
+	        System.out.println((stopTime - startTime));
+	        return nb;
+	    }
+	    
 	public static float[] computeAverageDistancetoOthers(ArrayList<Feature> nFeat){
 		int[] t = new int[nFeat.size()];
 		float[] s = new float[nFeat.size()];
@@ -437,34 +536,16 @@ public class test {
 		return roisD;
 	}
 	
-	public static Roi[] drawStringExceed(int d, ImagePlus img, Roi[] rois, int[] roisD){
+	public static Roi[] featureCountExceed(int d, Roi[] rois, int[] roisD){
 		ArrayList<Roi> indexes = new ArrayList<Roi>();
-		ImagePlus temp = img.duplicate();
-		temp.setTitle(Integer.toString(d));
-		ImageProcessor tp = temp.getProcessor();
-		tp.setColor(new Color(0,255,0));
 		for (int i = 0; i < rois.length; i++){
-			if (roisD[i] > d){
-			temp.setRoi(rois[i]);
-			ImageStatistics is = tp.getStatistics();
-			tp.drawString(Integer.toString(roisD[i]), (int) is.xCentroid, (int) is.yCentroid);
-			indexes.add(rois[i]);
-			}else{
-			tp.setColor(new Color(255,255,255));
-			tp.fill(rois[i]);
-
-			}
+			if (roisD[i] > d) indexes.add(rois[i]);
 		}
 		
-		temp.updateAndDraw();
-		temp.show();
-		
 		Roi[] index = new Roi[indexes.size()];
-		
 		for (int i = 0; i < indexes.size(); i++){
 			index[i] = indexes.get(i);
 		}
-		
 		return index;
 	}	
 

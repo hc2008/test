@@ -65,42 +65,34 @@ public class test {
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 
 		//Integer[][] sx = new Integer[rois.length][2];
-		Integer[][] sy = new Integer[rois.length][2];
 		
+		 Integer[][] sy = sortCenterRoi(rois) ;
+		 
+		/*
 		for (int i = 0; i < rois.length; i++){
-			//sx[i][0] = i;
 			sy[i][0] = i;
-			//sx[i][1] = (int) rois[i].getBounds().getCenterX();
 			sy[i][1] = (int) rois[i].getBounds().getCenterY();
 		}
 				
 		//sx = sort2DInteger(sx);
 		sy = sort2DInteger(sy);
-
+		*/
+		
 		ArrayList<Integer[]> nb = findNB(img, sy, rois);
 		
-		/*
-		ArrayList<Roi> roistemp = new ArrayList<Roi>();
-		ArrayList<Integer[]> nbtemp = new ArrayList<Integer[]>();
-		for (int i = 0; i < nb.size(); i++){
-			if (nb.get(i).length > 2) {
-				roistemp.add(rois[i]);
-				nbtemp.add(nb.get(i));
-			}
-		}
 		
-		Roi[] rt = new Roi[roistemp.size()];
-		for (int i = 0; i < roistemp.size(); i++){
-			rt[i] = roistemp.get(i);
-		}
-		System.out.println(rois.length);
-		rois = rt;
-		nb = nbtemp;
-		System.out.println(nb.size());
-		System.out.println(rois.length);
+		
+		int roisCount;
+		do{
+		roisCount = rois.length;
+		rois = removeSmallRoiCluster(rois, nb);
+		sy = sortCenterRoi(rois);
+		nb = findNB(img, sy, rois);
+		}while(roisCount != rois.length); 
+		
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
-		*/
+		
 		
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
@@ -299,6 +291,29 @@ public class test {
 		rm.runCommand("Show All");
 		*/		
 
+	}
+	public static Roi[] removeSmallRoiCluster(Roi[] rois, ArrayList<Integer[]> nb){
+		ArrayList<Roi> roistemp = new ArrayList<Roi>();
+		for (int i = 0; i < nb.size(); i++){
+			if (nb.get(i).length > 3) {
+				roistemp.add(rois[i]);
+			}
+		}
+		
+		Roi[] rt = new Roi[roistemp.size()];
+		for (int i = 0; i < roistemp.size(); i++){
+			rt[i] = roistemp.get(i);
+		}
+		return rt;
+	}
+	public static Integer[][] sortCenterRoi(Roi[] rois){
+		Integer[][] sy = new Integer[rois.length][2];
+		for (int i = 0; i < rois.length; i++){
+			sy[i][0] = i;
+			sy[i][1] = (int) rois[i].getBounds().getCenterY();
+		}
+		sy = sort2DInteger(sy);
+		return sy;
 	}
 	
 	public static double[] measureDAB(ImagePlus DAB, Roi[] rois){

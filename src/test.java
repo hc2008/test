@@ -64,24 +64,10 @@ public class test {
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 
-		//Integer[][] sx = new Integer[rois.length][2];
-		
-		 Integer[][] sy = sortCenterRoi(rois) ;
-		 
-		/*
-		for (int i = 0; i < rois.length; i++){
-			sy[i][0] = i;
-			sy[i][1] = (int) rois[i].getBounds().getCenterY();
-		}
-				
-		//sx = sort2DInteger(sx);
-		sy = sort2DInteger(sy);
-		*/
-		
+		Integer[][] sy = sortCenterRoi(rois) ;
 		ArrayList<Integer[]> nb = findNB(img, sy, rois);
 		
-		
-		
+		//reiterate removing roi with 0 or 1 neighbor 
 		int roisCount;
 		do{
 		roisCount = rois.length;
@@ -90,6 +76,7 @@ public class test {
 		nb = findNB(img, sy, rois);
 		}while(roisCount != rois.length); 
 		
+		//update roiManager
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 		
@@ -98,33 +85,13 @@ public class test {
 		ArrayList<ImagePlus> S = cdr.run(img);
 		
 		ImagePlus DAB = S.get(1);
-		double[] densityDAB = measureDAB(DAB, rois);
+		double[] densityDAB = measureDensity(DAB, rois);
+		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
+		int[] mM = findRoiWithMinMaxDensity(rois,nb,densityDAB);
 		
-		for (int i = 0; i < nb.size(); i++) System.out.println(i + "," + nb.get(i).length);
+		System.out.println(mM[0] + "," + mM[1]);
 		
-		DescriptiveStatistics ds = new DescriptiveStatistics();
-		double[] mdDAB = new double[rois.length];
-		for (int i = 0; i < rois.length; i++){
-			DescriptiveStatistics ds1= new DescriptiveStatistics();
-			Integer[] r = nb.get(i);
-			
-			//double sum = 0;
-			for (int j = 0; j < r.length; j++){
-				ds1.addValue(densityDAB[r[j]]);
-				//m = sum + densityDAB[r[j]];
-			}
-			mdDAB[i] = ds1.getMean();
-			//DAB[i] = sum/r.length;
-			ds.addValue(mdDAB[i]);
-			//System.out.println((i+1) + "," + (sum/r.length));
-		}
 		
-		double min = ds.getMin();
-		double max = ds.getMax();
-		for (int i = 0; i < rois.length; i++){
-		if (mdDAB[i] == min) System.out.println("min" + "," + (i+1));
-		if (mdDAB[i] == max) System.out.println("max" + "," + (i+1));
-		}
 		imgblank.hide();
 		img.show();
 		
@@ -292,6 +259,33 @@ public class test {
 		*/		
 
 	}
+	
+	public static int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, double[] density){
+		DescriptiveStatistics ds = new DescriptiveStatistics();
+		double[] mdDAB = new double[rois.length];
+		int[] matchedRoi = new int[2];
+		for (int i = 0; i < rois.length; i++){
+			DescriptiveStatistics ds1= new DescriptiveStatistics();
+			Integer[] r = nb.get(i);
+			
+			//double sum = 0;
+			for (int j = 0; j < r.length; j++){
+				ds1.addValue(density[r[j]]);
+			}
+			mdDAB[i] = ds1.getMean();
+			ds.addValue(mdDAB[i]);
+		}
+		
+		double min = ds.getMin();
+		double max = ds.getMax();
+		for (int i = 0; i < rois.length; i++){
+		if (mdDAB[i] == min) matchedRoi[0] = i;
+		if (mdDAB[i] == max) matchedRoi[1] = i;
+		}
+		
+		return matchedRoi;
+	}
+	
 	public static Roi[] removeSmallRoiCluster(Roi[] rois, ArrayList<Integer[]> nb){
 		ArrayList<Roi> roistemp = new ArrayList<Roi>();
 		for (int i = 0; i < nb.size(); i++){
@@ -316,7 +310,7 @@ public class test {
 		return sy;
 	}
 	
-	public static double[] measureDAB(ImagePlus DAB, Roi[] rois){
+	public static double[] measureDensity(ImagePlus DAB, Roi[] rois){
 		int options = ImageStatistics.MEDIAN;
 		double[] densityDAB = new double[rois.length]; 
 		for (int i = 0; i < rois.length; i++){
@@ -329,8 +323,7 @@ public class test {
 	}
 	
 	public static ArrayList<Integer[]> findNB(ImagePlus img, Integer[][] sy, Roi[] rois){
-	        long startTime = System.nanoTime();
-	    	int options = ImageStatistics.MIN_MAX;
+	        int options = ImageStatistics.MIN_MAX;
 	        ImageStatistics stats = new ImageStatistics();
 	        ArrayList<Integer[]> nb = new ArrayList<Integer[]>();
 	        int w = img.getWidth();
@@ -381,9 +374,6 @@ public class test {
 	            imgtemp.close();
 	            
 	        }
-	        
-	        long stopTime = System.nanoTime();
-	        System.out.println((stopTime - startTime));
 	        return nb;
 	    }
 	    

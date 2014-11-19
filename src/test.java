@@ -6,9 +6,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.TreeSet;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.math3.stat.Frequency;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 
@@ -64,7 +66,7 @@ public class test {
 		int[] featinRoi = findFeatinRoi(feat,rois, sy);
 			
 		rois = findRoiwithFeat(featinRoi, rois);
-		for (int i = 0; i < rois.length; i++) System.out.println(rois[i].getName());
+		//for (int i = 0; i < rois.length; i++) System.out.println(rois[i].getName());
 		RoiManager rm = RoiManager.getInstance();
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
@@ -120,7 +122,7 @@ public class test {
 	
 		
 		//-------------------------------------------------------------
-		
+	
 		//imgblank.hide();
 		//img.show();
 		
@@ -290,39 +292,29 @@ public class test {
 	}
 	
 	public static Roi[] findRoiwithFeat(int[] featinRoi, Roi[] rois){
-		int[] p = featinRoi;
-		Arrays.sort(p);
-		
-		ArrayList<Integer> p1 = new ArrayList<Integer>();
-		int temp = -1;
-		ArrayList<Integer> c = new ArrayList<Integer>();
-		int count = 0;
-		for (int i = 0; i < p.length; i++) {
-			if (p[i] != temp) {
-				p1.add(p[i]);
-				temp = p[i];
-				c.add(count);
-				count = 0;
-			}else{
-				count++;
-			}
+		Frequency f = new Frequency();
+		for (int i = 0; i < featinRoi.length; i++) f.addValue(featinRoi[i]);
+		String s = f.toString();
+		String[] s1 = s.split("\n");
+		ArrayUtils.remove(s1, 0);
+		int[][] ft = new int[s1.length][2];
+		for (int i = 1; i < s1.length; i++){
+			String[] s2 = s1[i].split("\t");
+			ft[i][0] = Integer.parseInt(s2[0]);
+			ft[i][1] = Integer.parseInt(s2[1]);
 		}
 		
-		int[] p2 = new int[p1.size()];
-		ArrayList<Roi> roisk = new ArrayList<Roi>();
+		ArrayList<Roi> temp = new ArrayList<Roi>();
 		
-		for (int i = 0; i < p1.size(); i++) {
-			p2[i] = p1.get(i);
-			roisk.add(rois[p2[i]]);
+		for (int i = 0; i < ft.length; i++) {
+			temp.add(rois[ft[i][0]]);
+			rois[ft[i][0]].setName(rois[ft[i][0]].getName() + " " + ft[i][1]);
 		}
 		
-		Roi[] roisn = new Roi[roisk.size()];
-		for (int i = 0; i < roisk.size(); i++) {
-			roisn[i] = roisk.get(i);
-			roisn[i].setName(roisn[i].getName() + " " + c.get(i));
-		}
+		Roi[] t = new Roi[temp.size()];
+		for (int i = 0; i < t.length; i++) t[i] = temp.get(i);
 		
-		return roisn;
+		return t;
 	}
 	
 	public static int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, double[] density){
@@ -518,7 +510,8 @@ public class test {
 	
 	public static int[] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){
 		int[] featinRoi = new int[feat.size()];
-		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = 0;
+		ArrayList<Integer> temp = new ArrayList<Integer>();
+		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = -1;
 		for (int i = 0; i < feat.size(); i++){
 			
 			int xf = (int) feat.get(i).location[0];
@@ -553,7 +546,15 @@ public class test {
 				}
 			}
 		}
-		return featinRoi;
+		
+		for (int i = 0; i < featinRoi.length; i++){
+			if (featinRoi[i] > -1) temp.add(featinRoi[i]);
+		}
+		
+		int[] t = new int[temp.size()];
+		for (int i = 0; i < t.length; i++) t[i] = temp.get(i);
+		
+		return t;
 	}
 	
 	public static Integer[][] sort2DInteger(Integer[][] data){

@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.TreeSet;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -22,6 +24,7 @@ import ij.plugin.filter.Analyzer;
 import ij.plugin.filter.Binary;
 import ij.plugin.filter.ParticleAnalyzer;
 import ij.plugin.frame.RoiManager;
+import ij.process.AutoThresholder;
 //import ij.process.ImageConverter;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
@@ -37,7 +40,7 @@ public class test {
 	static int x = 1360;
 	static int y = 976;
 	
-	public static void main(String[] args) {
+	public static  void main(String[] args) {
 		String path = "/home/hc2008/Image/image/klotho/EGFR-1/08-4888D1-N3.tif";
 		ImagePlus img2 = IJ.openImage(path);
 		img2.setRoi(0, 0, x, y);
@@ -65,7 +68,7 @@ public class test {
 		Integer[][] sy = sortCenterRoi(rois);
 		int[] featinRoi = findFeatinRoi(feat,rois, sy);
 			
-		rois = findRoiwithFeat(featinRoi, rois);
+		rois = findRoiwithFeat(featinRoi, rois, 3, 100);
 		//for (int i = 0; i < rois.length; i++) System.out.println(rois[i].getName());
 		RoiManager rm = RoiManager.getInstance();
 		rm.reset();
@@ -111,15 +114,22 @@ public class test {
 		ArrayList<ImagePlus> S = cdr.run(img);
 		
 		ImagePlus DAB = S.get(1);
-		double[] densityDAB = measureDensity(DAB, rois);
+		int[] densityDAB = measureDensity(DAB, rois);
 		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
 		int[] mM = findRoiWithMinMaxDensity(rois,nb,densityDAB);
 		
-		System.out.println(mM[0] + "," + mM[1]);
-		
-		rm.reset();
-		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 	
+		AutoThresholder at = new AutoThresholder();
+		int th = at.getThreshold(AutoThresholder.Method.Otsu, transferArraysToHistogram256(densityDAB));
+		
+		for (int i = 0; i < rois.length; i++){
+			img.setRoi(rois[i]);
+			if (densityDAB[i] >= th) ip.fill(rois[i]);
+		}
+		
+		img.updateAndDraw();
+		img.show();
+		
 		
 		//-------------------------------------------------------------
 	
@@ -291,25 +301,39 @@ public class test {
 
 	}
 	
-	public static Roi[] findRoiwithFeat(int[] featinRoi, Roi[] rois){
+	public static int[] transferArraysToHistogram256(int[] density){
+		Frequency f = new Frequency();
+		int[] p = new int[256];
+		for (int i = 0 ; i < density.length; i++) f.addValue(density[i]);
+		for (int i = 0 ; i < 256; i++) p[i] = (int) f.getCount(i);
+		return p;
+	}
+	
+	public static Roi[] findRoiwithFeat(int[] featinRoi, Roi[] rois, int min, int max){
 		Frequency f = new Frequency();
 		for (int i = 0; i < featinRoi.length; i++) f.addValue(featinRoi[i]);
 		String s = f.toString();
 		String[] s1 = s.split("\n");
-		ArrayUtils.remove(s1, 0);
+		s1 = ArrayUtils.remove(s1, 0);
+		
 		int[][] ft = new int[s1.length][2];
-		for (int i = 1; i < s1.length; i++){
+		for (int i = 0; i < s1.length; i++){
 			String[] s2 = s1[i].split("\t");
 			ft[i][0] = Integer.parseInt(s2[0]);
 			ft[i][1] = Integer.parseInt(s2[1]);
+			//System.out.println(i + "," + ft[i][0] + "," + ft[i][1] );
 		}
+	
 		
 		ArrayList<Roi> temp = new ArrayList<Roi>();
 		
 		for (int i = 0; i < ft.length; i++) {
+			if (ft[i][1] >= min & ft[i][1] <= max){
 			temp.add(rois[ft[i][0]]);
 			rois[ft[i][0]].setName(rois[ft[i][0]].getName() + " " + ft[i][1]);
+			}
 		}
+			
 		
 		Roi[] t = new Roi[temp.size()];
 		for (int i = 0; i < t.length; i++) t[i] = temp.get(i);
@@ -317,7 +341,7 @@ public class test {
 		return t;
 	}
 	
-	public static int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, double[] density){
+	public static int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, int[] density){
 		DescriptiveStatistics ds = new DescriptiveStatistics();
 		double[] mdDAB = new double[rois.length];
 		int[] matchedRoi = new int[2];
@@ -367,14 +391,14 @@ public class test {
 		return sy;
 	}
 	
-	public static double[] measureDensity(ImagePlus DAB, Roi[] rois){
+	public static int[] measureDensity(ImagePlus DAB, Roi[] rois){
 		int options = ImageStatistics.MEDIAN;
-		double[] densityDAB = new double[rois.length]; 
+		int[] densityDAB = new int[rois.length]; 
 		for (int i = 0; i < rois.length; i++){
 			ImageStatistics stats = new ImageStatistics();
 			DAB.setRoi(rois[i]);
 			stats = DAB.getStatistics(options);
-			densityDAB[i] = stats.median;
+			densityDAB[i] = (int) stats.median;
 		}
 		return densityDAB;
 	}

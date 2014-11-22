@@ -9,7 +9,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
+
+import javax.swing.JTable;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.stat.Frequency;
@@ -62,13 +66,21 @@ public class test {
 		for (int i = 0; i < feat.size(); i++) ipblank.drawOval((int) feat.get(i).location[0], (int) feat.get(i).location[1], 2,2);
 		imgblank.updateAndDraw();
 		imgblank.show();
-		
-		
+				
 		Roi[] rois = doSlic(img, 30, 0.3F);
+		/*
+		TreeMap<Integer,Roi> hs = new TreeMap<Integer,Roi>();
+		for (int i= 0; i < rois.length; i++) hs.put(i, rois[i]);
+		
+		Iterator it = hs.keySet().iterator();
+		while (it.hasNext()) System.out.println((int) it.next());
+					
+		JTable jt = new JTable();
+		*/
 		Integer[][] sy = sortCenterRoi(rois);
 		int[] featinRoi = findFeatinRoi(feat,rois, sy);
-			
-		rois = findRoiwithFeat(featinRoi, rois, 3, 100);
+		rois = findRoiwithFeat(featinRoi, rois, 0, 100);
+		
 		//for (int i = 0; i < rois.length; i++) System.out.println(rois[i].getName());
 		RoiManager rm = RoiManager.getInstance();
 		rm.reset();
@@ -299,6 +311,17 @@ public class test {
 		rm.runCommand("Show All");
 		*/		
 
+	}
+	
+	public class RoisFeat {
+		private Roi[] rois;
+		private ArrayList<Feature[]> feat;
+		public RoisFeat (Roi[] rois, ArrayList<Feature[]> feat){
+			this.rois = rois;
+			this.feat = feat;
+		}
+		public Roi[] getRois() { return rois; }
+		public ArrayList<Feature[]> getFeat() {return feat;}
 	}
 	
 	public static int[] transferArraysToHistogram256(int[] density){
@@ -535,6 +558,7 @@ public class test {
 	public static int[] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){
 		int[] featinRoi = new int[feat.size()];
 		ArrayList<Integer> temp = new ArrayList<Integer>();
+
 		for (int i = 0; i < featinRoi.length; i++) featinRoi[i] = -1;
 		for (int i = 0; i < feat.size(); i++){
 			

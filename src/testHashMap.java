@@ -19,6 +19,8 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.stat.Frequency;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
+import org.python.google.common.collect.ArrayListMultimap;
+import org.python.google.common.collect.Multimap;
 
 import ij.*;
 import ij.gui.Roi;
@@ -44,7 +46,7 @@ public class testHashMap {
 	static int x = 1360;
 	static int y = 976;
 	
-	public static  void main(String[] args) {
+	public static  void main(String[] args){
 		String path = "/home/hc2008/Image/image/klotho/EGFR-1/08-4888D1-N3.tif";
 		ImagePlus img2 = IJ.openImage(path);
 		img2.setRoi(0, 0, x, y);
@@ -54,76 +56,47 @@ public class testHashMap {
 		
 		ArrayList<Feature> feat = doSift(ip);
 		
+		/*
 		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
 		imgblank.show();
 		IJ.run("Make Binary","");
 		imgblank.hide();
 		ImageProcessor ipblank = imgblank.getProcessor();
 		ipblank.setColor(new Color(0));
-		
-		//ArrayList<Feature> nFeat = removeFeatbyScale(feat,6.0F);
-		//for (int i = 0; i < nFeat.size(); i++) ipblank.drawOval((int) nFeat.get(i).location[0], (int) nFeat.get(i).location[1], 2,2);
 		for (int i = 0; i < feat.size(); i++) ipblank.drawOval((int) feat.get(i).location[0], (int) feat.get(i).location[1], 2,2);
 		imgblank.updateAndDraw();
 		imgblank.show();
-				
-		Roi[] rois = doSlic(img, 30, 0.3F);
-
-		Integer[][] sy = sortCenterRoi(rois);
-		Integer[][] featinRoi = findFeatinRoi(feat,rois, sy);
-		featinRoi = sort2DInteger(featinRoi);
-		
-		ArrayList<Integer> r = new ArrayList<Integer>();
-		ArrayList<int[]> f = new ArrayList<int[]>();
-		ArrayList<Integer> c = new ArrayList<Integer>();
-		ArrayList<Integer> a = new ArrayList<Integer>();
-		int t = -1;
-		for (int i = 0; i < featinRoi.length; i++) {
-			if (featinRoi[i][1] != t){
-				t = featinRoi[i][1];
-				r.add(featinRoi[i][1]);
-				if (i > 0){
-				int[] b = new int[a.size()];
-				for (int j = 0; j < b.length; j++) b[j] = a.get(j);
-				c.add(a.size());
-				a.clear();
-				a.add(featinRoi[i][0]);
-				f.add(b);
-				}
-			}else{
-				a.add(featinRoi[i][0]);
-			}
-			if (i == (featinRoi.length - 1)){
-				int[] b = new int[a.size()];
-				for (int j = 0; j < b.length; j++) b[j] = a.get(j);
-				c.add(a.size());
-				a.clear();
-				a.add(featinRoi[i][0]);
-				f.add(b);
-			}
-		}
-		
-		for (int i= 0; i < r.size(); i++){
-			System.out.print(r.get(i));
-			int[] t1 = f.get(i);
-			for (int j= 0; j < t1.length; j++ ) System.out.print("," + t1[j]);
-			System.out.println("," + c.get(i));
-		}
-		
-		
-		/*
-		TreeMap<Integer,Integer> hs = new TreeMap<Integer,Integer>();
-		for (int i= 0; i < rois.length; i++) hs.put(featinRoi[i][0], featinRoi[i][1]);
-		Iterator it = hs.keySet().iterator();
-		while (it.hasNext()) System.out.println((int) it.next());
 		*/
+		//ArrayList<Feature> nFeat = removeFeatbyScale(feat,6.0F);
 		
+		
+		Roi[] roisT = doSlic(img, 30, 0.3F);
+		int roiCount = roisT.length;
+		
+		Integer[][] sy = sortCenterRoi(roisT);
+		Integer[][] featinRoi = findFeatinRoi(feat,roisT, sy);
+		RoisFeat rf = findRoiFeat(featinRoi);
+		
+		int[] roisNoFeat = roisWithoutFeat(rf.getRoi(), roiCount);
+		int maxFeatCount = findMaxFeatCount(rf.getCount());
+		Multimap<Integer, Integer> mp =  ArrayListMultimap.create();
+		HashMap<Integer, int[]> hm = new HashMap<Integer, int[]>();
+		for (int i = 0; i < rf.getRoi().length; i++) {
+			mp.put(rf.getCount()[i], rf.getRoi()[i]);
+			hm.put(rf.getRoi()[i], rf.getFeat().get(i));
+		}
+		int[] selectedRoiByFeatCount = selectRoisWithFeatRange(mp, maxFeatCount, 3, 100);
+		Roi[] rois = indexToRoi(roisT, selectedRoiByFeatCount);
+		Roi[] rois0 = indexToRoi(roisT, roisNoFeat);
+		
+		//rois = removeRoiWithoutFeat(rf, rois);
+
+		//rois = featureCountExceed(0, rois, roisD);
+			
 		//rois = findRoiwithFeat(featinRoi, rois, 0, 100);
 		
 		//for (int i = 0; i < rois.length; i++) System.out.println(rois[i].getName());
-		RoiManager rm = RoiManager.getInstance();
-		rm.reset();
-		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
+
 		
 		//int[] roisD = countFeatureDotbyRoi(rois, imgblank, ipblank);
 		//img.hide();
@@ -138,24 +111,15 @@ public class testHashMap {
 		rm.runCommand("Reset");
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 		*/
-		
+		RoiManager rm = RoiManager.getInstance();
+		rm.reset();
+		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 		rm.runCommand("Show All");
 		
-		//---------------------------------------------------------
+		RoiNB rnb = removeLonelyRoi(rois, img, 2);
+		rois = rnb.getRoi();
+		ArrayList<Integer[]> nb = rnb.getNB();
 		
-		sy = sortCenterRoi(rois) ;
-		ArrayList<Integer[]> nb = findNB(img, sy, rois);
-		
-		//reiterate removing roi with 0 or 1 neighbor 
-		int roisCount;
-		do{
-		roisCount = rois.length;
-		rois = removeSmallRoiCluster(rois, nb, 2);
-		sy = sortCenterRoi(rois);
-		nb = findNB(img, sy, rois);
-		}while(roisCount != rois.length); 
-		
-				
 		//update roiManager
 		rm.reset();
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
@@ -163,7 +127,6 @@ public class testHashMap {
 		
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
-		
 		ImagePlus DAB = S.get(1);
 		int[] densityDAB = measureDensity(DAB, rois);
 		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
@@ -352,15 +315,157 @@ public class testHashMap {
 
 	}
 	
-	public class RoisFeat {
-		private Roi[] rois;
-		private ArrayList<Feature[]> feat;
-		public RoisFeat (Roi[] rois, ArrayList<Feature[]> feat){
-			this.rois = rois;
-			this.feat = feat;
+	public static class RoiNB {
+		private Roi[] roi;
+		private ArrayList<Integer[]> NB;
+		private int[] count;
+		public RoiNB (Roi[] roi, ArrayList<Integer[]> NB){
+			this.roi = roi;
+			this.NB = NB;
 		}
-		public Roi[] getRois() { return rois; }
-		public ArrayList<Feature[]> getFeat() {return feat;}
+		public Roi[] getRoi() { return roi; }
+		public ArrayList<Integer[]> getNB() {return NB;}
+	}
+	
+	public static RoiNB removeLonelyRoi(Roi[] rois, ImagePlus img, int lessthan){
+		Integer[][] sy = sortCenterRoi(rois) ;
+		ArrayList<Integer[]> nb = findNB(img, sy, rois);
+		
+		//reiterate removing roi with 0 or 1 neighbor 
+		int roisCount;
+		do{
+		roisCount = rois.length;
+		rois = removeSmallRoiCluster(rois, nb, lessthan);
+		sy = sortCenterRoi(rois);
+		nb = findNB(img, sy, rois);
+		}while(roisCount != rois.length);
+		
+		return new RoiNB (rois, nb);
+	}
+	
+	public static Roi[] indexToRoi(Roi[] rois, int[] index){
+		ArrayList<Roi> t = new ArrayList<Roi>();
+		for (int i = 0; i < index.length; i++) t.add(rois[index[i]]); 
+		Roi[] r = new Roi[t.size()];
+		for (int i = 0; i < r.length; i++) r[i] = t.get(i);
+		return r;
+	}
+	
+	public static int[] selectRoisWithFeatRange(Multimap<Integer, Integer> mp, int maxFeatCount, int begin, int end){
+		
+		int[] roiSelectedFeatCount;
+		if (begin < 0) begin = 0;
+		if (end > maxFeatCount) end = maxFeatCount;
+		
+		ArrayList<Integer> roiSelected = new ArrayList<Integer>();
+		for (int j = begin; j <= end; j++){
+		roiSelectedFeatCount = selectRoisWithFeatCount(mp,j);
+		for (int i = 0; i < roiSelectedFeatCount.length; i++) roiSelected.add(roiSelectedFeatCount[i]);
+		}
+		
+		int[] r = new int[roiSelected.size()];
+		for (int i = 0; i < r.length; i++) r[i] = roiSelected.get(i);
+		
+		Arrays.sort(r);
+		return r;
+		
+	}
+	
+	public static int findMaxFeatCount(int[] featCount){
+		DescriptiveStatistics ds1= new DescriptiveStatistics();
+		for (int i = 0; i < featCount.length; i++) ds1.addValue((double) featCount[i]);
+		return (int) ds1.getMax();
+	}
+	
+	public static int[] selectRoisWithFeatCount(Multimap mp, int select){
+		Collection<Integer> cm = mp.get(select);
+		Iterator it = cm.iterator();
+		ArrayList<Integer> a = new ArrayList<Integer>();
+		while (it.hasNext()){
+			Object w = it.next();
+			a.add((int) w);
+		}
+		
+		int[] r = new int[a.size()];
+		for (int i = 0; i < a.size(); i++) r[i] = a.get(i);
+		return r;
+	}
+	
+	public static int[] roisWithoutFeat(int[] roitemp, int roiCount){
+		ArrayList<Integer> ro = new ArrayList<Integer>();
+		int temp = 0;
+		for (int i = 0; i < roitemp.length; i++){
+			while ((roitemp[i] - temp) > 1){
+				temp++;
+				ro.add(temp);
+			}
+			temp = roitemp[i];
+		}
+		
+		for (int i = temp + 1 ; i < roiCount; i++) ro.add(i);
+		
+		int[] roiNoFeat = new int[ro.size()];
+		for (int i = 0; i < ro.size(); i++) roiNoFeat[i] = ro.get(i);
+		return roiNoFeat;
+	}
+	
+	public static Roi[] removeRoiWithoutFeat(RoisFeat rf, Roi[] rois){
+		Roi[] roisTemp = new Roi[rf.getRoi().length];
+		for (int i = 0; i < roisTemp.length; i++) roisTemp[i] = rois[rf.getRoi()[i]]; 
+		return roisTemp;
+	}
+	
+	public static class RoisFeat {
+		private int[] roi;
+		private ArrayList<int[]> feat;
+		private int[] count;
+		public RoisFeat (int[] roi, ArrayList<int[]> feat, int[] count){
+			this.roi = roi;
+			this.feat = feat;
+			this.count = count;
+		}
+		public int[] getRoi() { return roi; }
+		public ArrayList<int[]> getFeat() {return feat;}
+		public int[] getCount() { return count; }
+	}
+	
+	public static RoisFeat findRoiFeat(Integer[][] featinRoi){
+		featinRoi = sort2DInteger(featinRoi);
+		
+		ArrayList<Integer> r = new ArrayList<Integer>();
+		ArrayList<int[]> f = new ArrayList<int[]>();
+		ArrayList<Integer> c = new ArrayList<Integer>();
+		ArrayList<Integer> a = new ArrayList<Integer>();
+		int t = -1;
+		for (int i = 0; i < featinRoi.length; i++) {
+			if (featinRoi[i][1] != t){
+				t = featinRoi[i][1];
+				r.add(featinRoi[i][1]);
+				if (i > 0){
+				int[] b = new int[a.size()];
+				for (int j = 0; j < b.length; j++) b[j] = a.get(j);
+				c.add(a.size());
+				a.clear();
+				a.add(featinRoi[i][0]);
+				f.add(b);
+				}
+			}else{
+				a.add(featinRoi[i][0]);
+			}
+			if (i == (featinRoi.length - 1)){
+				int[] b = new int[a.size()];
+				for (int j = 0; j < b.length; j++) b[j] = a.get(j);
+				c.add(a.size());
+				a.clear();
+				a.add(featinRoi[i][0]);
+				f.add(b);
+			}
+		}
+		
+		int[] r1 = ArrayUtils.toPrimitive(r.toArray(new Integer[0]));
+		int[] c1 = ArrayUtils.toPrimitive(c.toArray(new Integer[0]));
+		
+		return new RoisFeat(r1, f, c1);
 	}
 	
 	public static int[] transferArraysToHistogram256(int[] density){

@@ -127,14 +127,16 @@ public class testHashMap {
 		
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
-		ImagePlus DAB = S.get(1);
-		int[] densityDAB = measureDensity(DAB, rois);
+		int[] densityDAB = measureDensity(S.get(1), rois);
+		int[] densityH = measureDensity(S.get(2), rois);
 		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
-		int[] mM = findRoiWithMinMaxDensity(rois,nb,densityDAB);
+		int[] mMroisDAB = findRoiWithMinMaxDensity(rois,nb,densityDAB);
 		
+		System.out.println((mMroisDAB[0]+1) + "," + (mMroisDAB[1]+ 1));
 	
 		AutoThresholder at = new AutoThresholder();
 		int th = at.getThreshold(AutoThresholder.Method.Otsu, transferArraysToHistogram256(densityDAB));
+		
 		
 		for (int i = 0; i < rois.length; i++){
 			img.setRoi(rois[i]);

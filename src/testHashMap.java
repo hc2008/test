@@ -19,6 +19,7 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.stat.Frequency;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
+import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.python.google.common.collect.ArrayListMultimap;
 import org.python.google.common.collect.Multimap;
 
@@ -31,6 +32,7 @@ import ij.plugin.filter.Binary;
 import ij.plugin.filter.ParticleAnalyzer;
 import ij.plugin.frame.RoiManager;
 import ij.process.AutoThresholder;
+import ij.process.ByteProcessor;
 //import ij.process.ImageConverter;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
@@ -39,6 +41,12 @@ import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
 import sc.fiji.CMP_BIA.segmentation.structures.Labelling2D;
 import sc.fiji.CMP_BIA.segmentation.superpixels.*;
+import weka.clusterers.SimpleKMeans;
+import weka.core.Attribute;
+import weka.core.DenseInstance;
+import weka.core.Instances;
+import weka.filters.Filter;
+import weka.filters.unsupervised.attribute.Normalize;
 
 
 
@@ -127,27 +135,46 @@ public class testHashMap {
 		
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
-		int[] densityDAB = measureDensity(S.get(1), rois);
-		int[] densityH = measureDensity(S.get(2), rois);
-		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
-		int[] mMroisDAB = findRoiWithMinMaxDensity(rois,nb,densityDAB);
-		
-		System.out.println((mMroisDAB[0]+1) + "," + (mMroisDAB[1]+ 1));
 	
-		AutoThresholder at = new AutoThresholder();
-		int th = at.getThreshold(AutoThresholder.Method.Otsu, transferArraysToHistogram256(densityDAB));
-		
-		
-		for (int i = 0; i < rois.length; i++){
-			img.setRoi(rois[i]);
-			if (densityDAB[i] >= th) ip.fill(rois[i]);
+		ArrayList<String> st = new ArrayList<String>();
+		ArrayList<Double> score = new ArrayList<Double>();
+		ArrayList<int[]> index = new ArrayList<int[]>();
+
+		ScoreIndexName sin = new ScoreIndexName(score, index, st);
+		for (int i = 0 ; i < S.size(); i++) sin = scoreByOtsu(sin, measureDensity(S.get(i), rois), rois, img, S.get(i).getTitle());
+				
+		ArrayList<double[]> dens = new ArrayList<double[]>();
+		ArrayList<String> dname = new ArrayList<String>();
+		for (int i = 0; i < 3; i++)	{
+			dens.add(measureDensity(S.get(i), rois));
+			dname.add(S.get(i).getTitle());
 		}
 		
-		img.updateAndDraw();
-		img.show();
+		int[] kindex = kmeanDens(dens, dname, rois);
+		sin.put(findM(scoring(img, rois, kindex)), kindex, "kmean");
+		sin = compareScore(sin, rois, img);
+		
+		System.out.println(sin.getScore().get(0) + "," + sin.getName().get(0));
+		System.out.println(sin.getScore().size());
+		
+		ImagePlus imgk = img.duplicate();
+		
+		for (int i = 0; i < rois.length; i++){
+			imgk.setRoi(rois[i]);
+			if (sin.getIndex().get(0)[i] == 1)	imgk.getProcessor().fill(rois[i]);
+		}
+		
+		imgk.updateAndDraw();
+		imgk.show();
+
 		
 		
-		//-------------------------------------------------------------
+		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
+		//int[] mMroisDAB = findRoiWithMinMaxDensity(rois,nb,densityDAB);
+		
+		//System.out.println((mMroisDAB[0]+1) + "," + (mMroisDAB[1]+ 1));
+
+	//-------------------------------------------------------------
 	
 		//imgblank.hide();
 		//img.show();
@@ -317,6 +344,163 @@ public class testHashMap {
 
 	}
 	
+	public static int[] kmeanDens(ArrayList<double[]> dens, ArrayList<String> densName, Roi[] rois){
+		int s = dens.size();
+		ArrayList<Attribute> atts = new ArrayList<Attribute>();
+		for (int i = 0; i < s; i++) atts.add(new Attribute(densName.get(i)));
+		
+		Instances a = new Instances("test", atts, 0);
+		
+		for (int i = 0; i < rois.length; i++){
+			double[] temp = new double[s];
+			for(int j = 0; j < s; j++) temp[j] = dens.get(j)[i];
+			a.add(new DenseInstance(1.0, temp));
+		}
+		
+		Normalize tna = new Normalize();
+		SimpleKMeans kmeans = new SimpleKMeans();
+		kmeans.setPreserveInstancesOrder(true);
+		int[] result = null;
+		try {
+			//kmeans.setOptions(options);
+		    tna.setInputFormat(a);
+		    a = Filter.useFilter(a, tna);
+		    kmeans.setNumClusters(2);
+			kmeans.buildClusterer(a);
+			int[] assignments = kmeans.getAssignments();
+			result = new int[assignments.length];
+			for (int j = 0; j < result.length; j++){
+			result[j] =  assignments[j];
+			}
+		}
+		catch(Exception ie) {
+			
+		}
+		return result;
+	}
+	
+	public static ScoreIndexName compareScore(ScoreIndexName sin, Roi[] rois, ImagePlus img){
+		SummaryStatistics ss = new SummaryStatistics();
+		HashMap<Double, String> scorehm = new HashMap<Double, String>();
+		HashMap<String, int[]> indexhm = new HashMap<String, int[]>();
+		double score;
+		for(int i = 0; i < sin.getName().toArray().length; i++){
+		score = sin.getScore().get(i);
+		ss.addValue(score);
+		scorehm.put(score, sin.getName().get(i));
+		indexhm.put(sin.getName().get(i), sin.getIndex().get(i));
+		}
+		/*
+		System.out.println(ss.getMax());
+		System.out.println(scorehm.get(ss.getMax()));
+		
+		int[] temp = indexhm.get(scorehm.get(ss.getMax()));
+		*/
+		sin.clear();
+		sin.put(ss.getMax(), indexhm.get(scorehm.get(ss.getMax())), scorehm.get(ss.getMax()));
+		return sin;
+	}
+	
+	public static void drawRoi(int[] density, String n, ImagePlus img, RoiManager rm, int th){
+		ImagePlus img1 = img.duplicate();
+		img1.setTitle(n);
+		Roi[] rois = rm.getRoisAsArray();
+		ImageProcessor ip = img1.getProcessor();
+		for (int i = 0; i < rois.length; i++){
+			img1.setRoi(rois[i]);
+			if (density[i] > th) ip.fill(rois[i]);
+		}
+		img1.updateAndDraw();
+		img1.show();
+		rm.runCommand("Show ALl");
+	}
+	
+	public static class ScoreIndexName {
+		private ArrayList<int[]> index;
+		private ArrayList<Double> score;
+		private ArrayList<String> name;
+		public ScoreIndexName (ArrayList<Double> score, ArrayList<int[]> index,  ArrayList<String> name){
+			this.index = index;
+			this.score = score;
+			this.name = name;
+		}
+		public ArrayList<int[]> getIndex() { return index; }
+		public ArrayList<Double> getScore() {return score;}
+		public ArrayList<String> getName() {return name;}
+		
+		public void put (double a, int[] b, String c){
+			score.add(a);
+			index.add(b);
+			name.add(c);
+		}
+		
+		public void clear (){
+			score.clear();
+			index.clear();
+			name.clear();
+		}
+		
+	}
+	
+	public static ScoreIndexName scoreByOtsu(ScoreIndexName sin, double[] density, Roi[] rois, ImagePlus img, String name){
+		AutoThresholder at = new AutoThresholder();
+		int th = at.getThreshold(AutoThresholder.Method.Otsu, transferArraysToHistogram256(density));
+		
+		int[] index = new int[rois.length];
+		for (int i = 0; i < index.length; i++){
+			if (density[i] >= th) {
+				index[i] = 1;
+			}else{
+				index[i] = 0;
+			}
+		}
+	
+		sin.put(findM(scoring(img, rois, index)), index, name);
+		return sin;
+	}
+	
+	public static double findM(float[] b){
+		Median m = new Median();
+		double[] c = new double[b.length];
+		for (int i = 0; i < c.length; i++) c[i] = (double) b[i];
+		return m.evaluate(c);
+	}
+	
+	public static float[] scoring(ImagePlus img, Roi[] rois, int[] index){
+		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
+		ImageProcessor ipblank = imgblank.getProcessor();
+		ImagePlus imgblank1 = imgblank.duplicate();
+		ImageProcessor ipblank1 = imgblank1.getProcessor();
+		ResultsTable rt = new ResultsTable();
+		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.SHOW_NONE, Measurements.AREA, rt, (double)1, (double)999999);
+
+		
+		for (int i = 0; i < rois.length; i++){
+			imgblank.setRoi(rois[i]);
+			if (index[i] == 1) ipblank.fill(rois[i]);
+			ipblank.dilate();
+			imgblank.killRoi();
+		}
+		
+		imgblank.updateAndDraw();
+		pa.analyze(imgblank);
+		imgblank.close();
+		
+		for (int i = 0; i < rois.length; i++){
+			imgblank1.setRoi(rois[i]);
+			if (index[i] == 0) ipblank1.fill(rois[i]);
+			ipblank1.dilate();
+			imgblank1.killRoi();
+		}
+		
+		imgblank1.updateAndDraw();
+		pa.analyze(imgblank1);
+		imgblank1.close();
+		
+		return rt.getColumn(0);
+			
+	}
+	
 	public static class RoiNB {
 		private Roi[] roi;
 		private ArrayList<Integer[]> NB;
@@ -470,10 +654,10 @@ public class testHashMap {
 		return new RoisFeat(r1, f, c1);
 	}
 	
-	public static int[] transferArraysToHistogram256(int[] density){
+	public static int[] transferArraysToHistogram256(double[] density){
 		Frequency f = new Frequency();
 		int[] p = new int[256];
-		for (int i = 0 ; i < density.length; i++) f.addValue(density[i]);
+		for (int i = 0 ; i < density.length; i++) f.addValue((int) density[i]);
 		for (int i = 0 ; i < 256; i++) p[i] = (int) f.getCount(i);
 		return p;
 	}
@@ -560,16 +744,16 @@ public class testHashMap {
 		return sy;
 	}
 	
-	public static int[] measureDensity(ImagePlus DAB, Roi[] rois){
+	public static double[] measureDensity(ImagePlus img, Roi[] rois){
 		int options = ImageStatistics.MEDIAN;
-		int[] densityDAB = new int[rois.length]; 
+		double[] density = new double[rois.length]; 
 		for (int i = 0; i < rois.length; i++){
 			ImageStatistics stats = new ImageStatistics();
-			DAB.setRoi(rois[i]);
-			stats = DAB.getStatistics(options);
-			densityDAB[i] = (int) stats.median;
+			img.setRoi(rois[i]);
+			stats = img.getStatistics(options);
+			density[i] = stats.median;
 		}
-		return densityDAB;
+		return density;
 	}
 	
 	public static ArrayList<Integer[]> findNB(ImagePlus img, Integer[][] sy, Roi[] rois){

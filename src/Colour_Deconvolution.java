@@ -610,8 +610,8 @@ public class Colour_Deconvolution {
 		new ImagePlus(title+"-(Colour_3)",outputstack[2]).show();
 		*/
 		ImagePlus H = new ImagePlus("H",outputstack[0]);
-		ImagePlus D = new ImagePlus("D",outputstack[1]);
-		ImagePlus N = new ImagePlus("N",outputstack[2]);
+		ImagePlus D = new ImagePlus("DAB",outputstack[1]);
+		ImagePlus N = new ImagePlus("Noise",outputstack[2]);
 		ArrayList <ImagePlus> S = new ArrayList<ImagePlus>();
 		/*ImageStack S = H.createEmptyStack();
 		S.addSlice(H.getProcessor());

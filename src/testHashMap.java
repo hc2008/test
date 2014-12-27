@@ -2,6 +2,7 @@ import java.awt.Color;
 import java.awt.List;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -27,6 +28,7 @@ import ij.*;
 import ij.gui.Roi;
 import ij.measure.Measurements;
 import ij.measure.ResultsTable;
+import ij.plugin.ImageCalculator;
 import ij.plugin.filter.Analyzer;
 import ij.plugin.filter.Binary;
 import ij.plugin.filter.ParticleAnalyzer;
@@ -41,12 +43,20 @@ import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
 import sc.fiji.CMP_BIA.segmentation.structures.Labelling2D;
 import sc.fiji.CMP_BIA.segmentation.superpixels.*;
+import weka.attributeSelection.AttributeSelection;
+import weka.attributeSelection.CfsSubsetEval;
+import weka.attributeSelection.GreedyStepwise;
+import weka.classifiers.Evaluation;
+import weka.classifiers.functions.Logistic;
+import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.clusterers.SimpleKMeans;
 import weka.core.Attribute;
 import weka.core.DenseInstance;
 import weka.core.Instances;
+import weka.core.converters.ArffSaver;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.Normalize;
+import weka.filters.unsupervised.attribute.Remove;
 
 
 
@@ -54,15 +64,19 @@ public class testHashMap {
 	static int x = 1360;
 	static int y = 976;
 	
-	public static  void main(String[] args){
+	public static  void main(String[] args) throws Exception{
+		testHashMap fl = new testHashMap();
+		
+		//open the image and crop it to the size not including length mark
 		String path = "/home/hc2008/Image/image/klotho/EGFR-1/08-4888D1-N3.tif";
 		ImagePlus img2 = IJ.openImage(path);
 		img2.setRoi(0, 0, x, y);
-		ImagePlus img = cropImg(img2, 0, 0, x, y);
+		ImagePlus img = fl.cropImg(img2, 0, 0, x, y);
 		ImageProcessor ip = img.getProcessor();
 		img.show();
 		
-		ArrayList<Feature> feat = doSift(ip);
+		//apply SIFT to obtain feature points
+		ArrayList<Feature> feat = fl.doSift(ip);
 		
 		/*
 		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
@@ -77,25 +91,33 @@ public class testHashMap {
 		*/
 		//ArrayList<Feature> nFeat = removeFeatbyScale(feat,6.0F);
 		
-		
-		Roi[] roisT = doSlic(img, 30, 0.3F);
+		//apply SLIC to obtain array of ROI
+		Roi[] roisT = fl.doSlic(img, 30, 0.3F);
 		int roiCount = roisT.length;
 		
-		Integer[][] sy = sortCenterRoi(roisT);
-		Integer[][] featinRoi = findFeatinRoi(feat,roisT, sy);
-		RoisFeat rf = findRoiFeat(featinRoi);
+		//use sorted Y coordinate of ROI center(sy) to accelerate the searching of which ROI contain feature
+		Integer[][] sy = fl.sortCenterRoi(roisT);
+		Integer[][] featinRoi = fl.findFeatinRoi(feat,roisT, sy);
 		
-		int[] roisNoFeat = roisWithoutFeat(rf.getRoi(), roiCount);
-		int maxFeatCount = findMaxFeatCount(rf.getCount());
+		//find the indices of feature in ROI
+		RoisFeat rf = fl.findRoiFeat(featinRoi);
+		//find the indices of ROI without any feature
+		int[] roisNoFeat = fl.roisWithoutFeat(rf.getRoi(), roiCount);
+		//the maximal feature count in a ROI 
+		int maxFeatCount = fl.findMaxFeatCount(rf.getCount());
+		//use Multimap to store feature count in a roi, roi
 		Multimap<Integer, Integer> mp =  ArrayListMultimap.create();
+		//hm is a HashMap to store the indices of feature in a ROI
 		HashMap<Integer, int[]> hm = new HashMap<Integer, int[]>();
 		for (int i = 0; i < rf.getRoi().length; i++) {
 			mp.put(rf.getCount()[i], rf.getRoi()[i]);
 			hm.put(rf.getRoi()[i], rf.getFeat().get(i));
 		}
-		int[] selectedRoiByFeatCount = selectRoisWithFeatRange(mp, maxFeatCount, 3, 100);
-		Roi[] rois = indexToRoi(roisT, selectedRoiByFeatCount);
-		Roi[] rois0 = indexToRoi(roisT, roisNoFeat);
+		//select ROIs with feature counts more than
+		int[] selectedRoiByFeatCount = fl.selectRoisWithFeatRange(mp, maxFeatCount, 3, 100);
+		//obtain the ROI array (rois) with feature count more than ? and rois0 for ROI array without feature 
+		Roi[] rois = fl.indexToRoi(roisT, selectedRoiByFeatCount);
+		Roi[] rois0 = fl.indexToRoi(roisT, roisNoFeat);
 		
 		//rois = removeRoiWithoutFeat(rf, rois);
 
@@ -124,7 +146,8 @@ public class testHashMap {
 		for (int i = 0; i < rois.length; i++ ) rm.addRoi(rois[i]);
 		rm.runCommand("Show All");
 		
-		RoiNB rnb = removeLonelyRoi(rois, img, 2);
+		//remove ROI with neighborhood less than 2
+		RoiNB rnb = fl.removeLonelyRoi(rois, img, 2);
 		rois = rnb.getRoi();
 		ArrayList<Integer[]> nb = rnb.getNB();
 		
@@ -135,38 +158,39 @@ public class testHashMap {
 		
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
-	
-		ArrayList<String> st = new ArrayList<String>();
-		ArrayList<Double> score = new ArrayList<Double>();
-		ArrayList<int[]> index = new ArrayList<int[]>();
-
-		ScoreIndexName sin = new ScoreIndexName(score, index, st);
-		for (int i = 0 ; i < S.size(); i++) sin = scoreByOtsu(sin, measureDensity(S.get(i), rois), rois, img, S.get(i).getTitle());
+		
+		//construct a class with name of method, score, index (0/1 for a certain criteria) and roi array
+		
+		ScoreIndexName sin = fl.initScoreIndexName();
+		
+		//measurements in ROI with features more than ?
+		ArrayList<double[]> mms = new ArrayList<double[]>();
+		ArrayList<String> mmsName = new ArrayList<String>();
 				
-		ArrayList<double[]> dens = new ArrayList<double[]>();
-		ArrayList<String> dname = new ArrayList<String>();
-		for (int i = 0; i < 3; i++)	{
-			dens.add(measureDensity(S.get(i), rois));
-			dname.add(S.get(i).getTitle());
+		for (int i = 0 ; i < S.size(); i++) {
+			mms.add(fl.measureDensity(S.get(i), rois));
+			mmsName.add(S.get(i).getTitle());
 		}
 		
-		int[] kindex = kmeanDens(dens, dname, rois);
-		sin.put(findM(scoring(img, rois, kindex)), kindex, "kmean");
-		sin = compareScore(sin, rois, img);
+		for (int i = 0 ; i < S.size(); i++) sin = fl.scoreByOtsu(sin, mms.get(i), rois, img, S.get(i).getTitle());
+				
+		//use Kmean++ in weka to obtain selection index of roi
+		sin = fl.sinaddKmean(mms, mmsName, rois, img, sin);
+		//compare which method has the largest median of ROI area
+		sin = fl.compareScore(sin, rois, img);
 		
-		System.out.println(sin.getScore().get(0) + "," + sin.getName().get(0));
-		System.out.println(sin.getScore().size());
+		//select attributes and obtain correlation coefficients by logisitc regression
+		//lgData and lgDataName are selected data and their names
+		ArrayList<double[]> lgData = mms;
+		ArrayList<String> lgDataName = mmsName;
+		HashMap<String, Double> lgHM = fl.LogRegression(sin.getIndex().get(0), lgData, lgDataName);
+		for (Object key : lgHM.keySet())  System.out.println(key + " : " + lgHM.get(key));
+		img.setRoi(sin.getAreaRoi().get(0).getRoi()[0]);
+		ip.fill(sin.getAreaRoi().get(0).getRoi()[0]);
+		img.setRoi(sin.getAreaRoi().get(0).getRoi()[1]);
+		ip.fill(sin.getAreaRoi().get(0).getRoi()[1]);
+		img.updateAndDraw();
 		
-		ImagePlus imgk = img.duplicate();
-		
-		for (int i = 0; i < rois.length; i++){
-			imgk.setRoi(rois[i]);
-			if (sin.getIndex().get(0)[i] == 1)	imgk.getProcessor().fill(rois[i]);
-		}
-		
-		imgk.updateAndDraw();
-		imgk.show();
-
 		
 		
 		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
@@ -344,7 +368,101 @@ public class testHashMap {
 
 	}
 	
-	public static int[] kmeanDens(ArrayList<double[]> dens, ArrayList<String> densName, Roi[] rois){
+	public testHashMap(){
+		
+	}
+	
+	public ScoreIndexName sinaddKmean(ArrayList<double[]> mms, ArrayList<String> mmsName, Roi[] rois, ImagePlus img, ScoreIndexName sin){
+		int[] kindex = kmeanDens(mms, mmsName, rois);
+		AreaRoi ar = findAreaAndRoi(img, rois, kindex);
+		sin.put(findM(ar.getArea()), kindex, "kmean", ar);
+		return sin;
+	}
+	
+	public ScoreIndexName initScoreIndexName(){
+		ArrayList<String> st = new ArrayList<String>();
+		ArrayList<Double> score = new ArrayList<Double>();
+		ArrayList<int[]> index = new ArrayList<int[]>();
+		ArrayList<AreaRoi> arearoi = new ArrayList<AreaRoi>();
+		ScoreIndexName sin = new ScoreIndexName(score, index, st, arearoi);
+		return sin;
+	}
+	
+	//LogRegression: logistic regression, index has two class (0 or 1), ArrayList<double[]> d are data
+	//Instances a is the dataframe, a.setClassIndex(0) to denote index column, AttributeSelectedClassifier, 
+	//CfsSubsetEval and GreedyStepwise are used to do attribute selection, 
+	//the HashMap of <column of data, regression coefficient> 
+	public HashMap<String, Double> LogRegression(int[] index, ArrayList<double[]> d, ArrayList<String> mmsName) throws Exception{
+		String[] s = new String[index.length];
+		for (int i = 0; i < s.length; i++) s[i] = Integer.toString(index[i]);
+		ArrayList<Attribute> atts = new ArrayList<Attribute>();
+        ArrayList<String> classVal = new ArrayList<String>();
+        classVal.add("0");
+        classVal.add("1");
+		atts.add(new Attribute("A",classVal));
+		//int dc = 65;
+		for (String arg:mmsName){
+			atts.add(new Attribute(arg));
+		}
+		Instances a = new Instances("test", atts, 0);
+ 
+        DenseInstance newInstance  = new DenseInstance(a.numAttributes());
+               	
+        for (int i = 0; i < s.length; i++){
+            newInstance.setValue(0 , a.attribute(0).indexOfValue(s[i]) );
+            int j = 0;
+            for (double[] arg:d){
+            	newInstance.setValue(++j, arg[i]);
+            }
+            a.add(newInstance);
+        }
+
+        a.setClassIndex(0);
+        AttributeSelection attsel = new AttributeSelection();  // package weka.attributeSelection!
+        CfsSubsetEval eval = new CfsSubsetEval();
+        GreedyStepwise search = new GreedyStepwise();
+        search.setSearchBackwards(true);
+        attsel.setEvaluator(eval);
+        attsel.setSearch(search);
+        attsel.SelectAttributes(a);
+               
+        
+        //remove the unwanted attribute
+        int[] indices = attsel.selectedAttributes();
+        Arrays.sort(indices);
+        ArrayList<Integer> notInList = new ArrayList<Integer>();
+        
+        for (int i = 0; i < atts.size(); i++) {
+        	int flag = 0;
+        	for (int j : indices) {
+        		if (i == j) {
+        			flag = 1;
+        			break;
+        		}
+        	}
+        	if (flag == 0) notInList.add(i);
+        }
+        
+        int[] toRemove = new int[notInList.size()];
+        for (int i = 0; i < toRemove.length; i++) toRemove[i] = notInList.get(i);
+        
+        Remove rm = new Remove();
+        rm.setInvertSelection(false);
+        rm.setAttributeIndicesArray(toRemove);
+        rm.setInputFormat(a);
+        a = Filter.useFilter(a, rm);
+        a.compactify();
+ 
+        //apply logistic regression
+        Logistic lg = new Logistic();
+        lg.buildClassifier(a);
+        HashMap <String, Double> hm = new HashMap<String, Double>();
+        for (int i = 1; i < a.numAttributes(); i++) hm.put(a.attribute(i).name(),lg.coefficients()[i][0]);
+        return hm;
+
+	}
+	
+	public int[] kmeanDens(ArrayList<double[]> dens, ArrayList<String> densName, Roi[] rois){
 		int s = dens.size();
 		ArrayList<Attribute> atts = new ArrayList<Attribute>();
 		for (int i = 0; i < s; i++) atts.add(new Attribute(densName.get(i)));
@@ -379,15 +497,17 @@ public class testHashMap {
 		return result;
 	}
 	
-	public static ScoreIndexName compareScore(ScoreIndexName sin, Roi[] rois, ImagePlus img){
+	public ScoreIndexName compareScore(ScoreIndexName sin, Roi[] rois, ImagePlus img){
 		SummaryStatistics ss = new SummaryStatistics();
 		HashMap<Double, String> scorehm = new HashMap<Double, String>();
 		HashMap<String, int[]> indexhm = new HashMap<String, int[]>();
+		HashMap<Double, AreaRoi> scoreAreaRoihm = new HashMap<Double, AreaRoi>();
 		double score;
 		for(int i = 0; i < sin.getName().toArray().length; i++){
 		score = sin.getScore().get(i);
 		ss.addValue(score);
 		scorehm.put(score, sin.getName().get(i));
+		scoreAreaRoihm.put(score, sin.getAreaRoi().get(i));
 		indexhm.put(sin.getName().get(i), sin.getIndex().get(i));
 		}
 		/*
@@ -397,11 +517,11 @@ public class testHashMap {
 		int[] temp = indexhm.get(scorehm.get(ss.getMax()));
 		*/
 		sin.clear();
-		sin.put(ss.getMax(), indexhm.get(scorehm.get(ss.getMax())), scorehm.get(ss.getMax()));
+		sin.put(ss.getMax(), indexhm.get(scorehm.get(ss.getMax())), scorehm.get(ss.getMax()), scoreAreaRoihm.get(ss.getMax()));
 		return sin;
 	}
 	
-	public static void drawRoi(int[] density, String n, ImagePlus img, RoiManager rm, int th){
+	public void drawRoi(int[] density, String n, ImagePlus img, RoiManager rm, int th){
 		ImagePlus img1 = img.duplicate();
 		img1.setTitle(n);
 		Roi[] rois = rm.getRoisAsArray();
@@ -416,33 +536,41 @@ public class testHashMap {
 	}
 	
 	public static class ScoreIndexName {
+		
 		private ArrayList<int[]> index;
 		private ArrayList<Double> score;
 		private ArrayList<String> name;
-		public ScoreIndexName (ArrayList<Double> score, ArrayList<int[]> index,  ArrayList<String> name){
+		private ArrayList<AreaRoi> ar;
+		
+		public ScoreIndexName (ArrayList<Double> score, ArrayList<int[]> index,  ArrayList<String> name, ArrayList<AreaRoi> ar){
 			this.index = index;
 			this.score = score;
 			this.name = name;
+			this.ar = ar;
 		}
+		
 		public ArrayList<int[]> getIndex() { return index; }
 		public ArrayList<Double> getScore() {return score;}
 		public ArrayList<String> getName() {return name;}
+		public ArrayList<AreaRoi> getAreaRoi() {return ar;}
 		
-		public void put (double a, int[] b, String c){
+		public void put (double a, int[] b, String c, AreaRoi d){
 			score.add(a);
 			index.add(b);
 			name.add(c);
+			ar.add(d);
 		}
 		
 		public void clear (){
 			score.clear();
 			index.clear();
 			name.clear();
+			ar.clear();
 		}
 		
 	}
 	
-	public static ScoreIndexName scoreByOtsu(ScoreIndexName sin, double[] density, Roi[] rois, ImagePlus img, String name){
+	public ScoreIndexName scoreByOtsu(ScoreIndexName sin, double[] density, Roi[] rois, ImagePlus img, String name){
 		AutoThresholder at = new AutoThresholder();
 		int th = at.getThreshold(AutoThresholder.Method.Otsu, transferArraysToHistogram256(density));
 		
@@ -454,57 +582,107 @@ public class testHashMap {
 				index[i] = 0;
 			}
 		}
-	
-		sin.put(findM(scoring(img, rois, index)), index, name);
+		
+		AreaRoi ar = findAreaAndRoi(img, rois, index);
+		
+		sin.put(findM(ar.getArea()), index, name, ar);
 		return sin;
 	}
 	
-	public static double findM(float[] b){
+	public double findM(float[] b){
 		Median m = new Median();
 		double[] c = new double[b.length];
 		for (int i = 0; i < c.length; i++) c[i] = (double) b[i];
 		return m.evaluate(c);
 	}
 	
-	public static float[] scoring(ImagePlus img, Roi[] rois, int[] index){
-		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
-		ImageProcessor ipblank = imgblank.getProcessor();
-		ImagePlus imgblank1 = imgblank.duplicate();
-		ImageProcessor ipblank1 = imgblank1.getProcessor();
-		ResultsTable rt = new ResultsTable();
-		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.SHOW_NONE, Measurements.AREA, rt, (double)1, (double)999999);
-
+	public static class AreaRoi{
+		private float[] area;
+		private Roi[] roi;
+		public AreaRoi(float[] area, Roi[] roi){
+			area = this.area;
+			roi = this.roi;
+		}
 		
+		public void put(float[] a, Roi[] b){
+			this.area = a;
+			this.roi = b;
+		}
+		
+		public float[] getArea() {return area;}
+		public Roi[] getRoi() {return roi;}
+		
+	}
+	
+	public AreaRoi findAreaAndRoi(ImagePlus img, Roi[] rois, int[] index){
+		Roi[] maxArea = new Roi[2];
+		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
+		imgblank = paintRoiByIndex(imgblank, rois, index, 1);
+		
+		ImagePlus imgblank1 = paintRoiByIndex(imgblank, rois, index, 0);
+		ResultsTable rt = new ResultsTable();
+	
+		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.SHOW_NONE, Measurements.AREA, rt, (double)1, (double)9999999);
+		pa.analyze(imgblank);
+		pa.analyze(imgblank1);
+		
+		//maxArea[0] for index = 0, maxArea[1] for index = 0 
+		maxArea[1] = findLargeAreaWithoutHole(imgblank);
+		maxArea[0] = findLargeAreaWithoutHole(imgblank1);
+		
+		float[] area = rt.getColumn(0);
+		
+		AreaRoi ar = new AreaRoi(area, maxArea);
+		ar.put(area, maxArea);
+		
+		return ar;
+			
+	}
+	
+	public ImagePlus paintRoiByIndex(ImagePlus imgblank, Roi[]rois, int[] index, int c){
+		ImageProcessor ipblank = imgblank.getProcessor();
 		for (int i = 0; i < rois.length; i++){
 			imgblank.setRoi(rois[i]);
-			if (index[i] == 1) ipblank.fill(rois[i]);
+			if (index[i] == c) ipblank.fill(rois[i]);
 			ipblank.dilate();
 			imgblank.killRoi();
 		}
-		
+		ipblank.erode();
 		imgblank.updateAndDraw();
+		return imgblank;
+	}
+	
+	public Roi findLargeAreaWithoutHole(ImagePlus imgblank){
+		HashMap<Double, Roi> areaRoi = new HashMap<Double, Roi>();
+		DescriptiveStatistics ds= new DescriptiveStatistics();
+		ImageStatistics is = new ImageStatistics();
+		ResultsTable rt = new ResultsTable();
+		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.ADD_TO_MANAGER, Measurements.AREA, rt, (double)1, (double)9999999);
+		ImagePlus imga = imgblank.duplicate();
+		IJ.run(imgblank, "Fill Holes","");
+		RoiManager rm = RoiManager.getInstance();
+		rm.reset();
 		pa.analyze(imgblank);
-		imgblank.close();
+		Roi[] r = rm.getRoisAsArray();
+
+		ImageCalculator ic = new ImageCalculator();
+		ImagePlus imgb = ic.run("Difference create", imga, imgblank);
 		
-		for (int i = 0; i < rois.length; i++){
-			imgblank1.setRoi(rois[i]);
-			if (index[i] == 0) ipblank1.fill(rois[i]);
-			ipblank1.dilate();
-			imgblank1.killRoi();
+		for (int i = 0; i < r.length; i++){
+			imgb.setRoi(r[i]);
+			is = imgb.getStatistics();
+			double m = is.mean;
+			if (m == 0 || m == 255) {
+				areaRoi.put(is.area, r[i]);
+				ds.addValue(is.area);
+			}
 		}
-		
-		imgblank1.updateAndDraw();
-		pa.analyze(imgblank1);
-		imgblank1.close();
-		
-		return rt.getColumn(0);
-			
+		return areaRoi.get(ds.getMax());
 	}
 	
 	public static class RoiNB {
 		private Roi[] roi;
 		private ArrayList<Integer[]> NB;
-		private int[] count;
 		public RoiNB (Roi[] roi, ArrayList<Integer[]> NB){
 			this.roi = roi;
 			this.NB = NB;
@@ -513,7 +691,7 @@ public class testHashMap {
 		public ArrayList<Integer[]> getNB() {return NB;}
 	}
 	
-	public static RoiNB removeLonelyRoi(Roi[] rois, ImagePlus img, int lessthan){
+	public RoiNB removeLonelyRoi(Roi[] rois, ImagePlus img, int lessthan){
 		Integer[][] sy = sortCenterRoi(rois) ;
 		ArrayList<Integer[]> nb = findNB(img, sy, rois);
 		
@@ -529,7 +707,7 @@ public class testHashMap {
 		return new RoiNB (rois, nb);
 	}
 	
-	public static Roi[] indexToRoi(Roi[] rois, int[] index){
+	public Roi[] indexToRoi(Roi[] rois, int[] index){
 		ArrayList<Roi> t = new ArrayList<Roi>();
 		for (int i = 0; i < index.length; i++) t.add(rois[index[i]]); 
 		Roi[] r = new Roi[t.size()];
@@ -537,7 +715,7 @@ public class testHashMap {
 		return r;
 	}
 	
-	public static int[] selectRoisWithFeatRange(Multimap<Integer, Integer> mp, int maxFeatCount, int begin, int end){
+	public int[] selectRoisWithFeatRange(Multimap<Integer, Integer> mp, int maxFeatCount, int begin, int end){
 		
 		int[] roiSelectedFeatCount;
 		if (begin < 0) begin = 0;
@@ -557,13 +735,13 @@ public class testHashMap {
 		
 	}
 	
-	public static int findMaxFeatCount(int[] featCount){
+	public int findMaxFeatCount(int[] featCount){
 		DescriptiveStatistics ds1= new DescriptiveStatistics();
 		for (int i = 0; i < featCount.length; i++) ds1.addValue((double) featCount[i]);
 		return (int) ds1.getMax();
 	}
 	
-	public static int[] selectRoisWithFeatCount(Multimap mp, int select){
+	public int[] selectRoisWithFeatCount(Multimap mp, int select){
 		Collection<Integer> cm = mp.get(select);
 		Iterator it = cm.iterator();
 		ArrayList<Integer> a = new ArrayList<Integer>();
@@ -577,7 +755,7 @@ public class testHashMap {
 		return r;
 	}
 	
-	public static int[] roisWithoutFeat(int[] roitemp, int roiCount){
+	public int[] roisWithoutFeat(int[] roitemp, int roiCount){
 		ArrayList<Integer> ro = new ArrayList<Integer>();
 		int temp = 0;
 		for (int i = 0; i < roitemp.length; i++){
@@ -595,11 +773,13 @@ public class testHashMap {
 		return roiNoFeat;
 	}
 	
-	public static Roi[] removeRoiWithoutFeat(RoisFeat rf, Roi[] rois){
+	public Roi[] removeRoiWithoutFeat(RoisFeat rf, Roi[] rois){
 		Roi[] roisTemp = new Roi[rf.getRoi().length];
 		for (int i = 0; i < roisTemp.length; i++) roisTemp[i] = rois[rf.getRoi()[i]]; 
 		return roisTemp;
 	}
+	
+	
 	
 	public static class RoisFeat {
 		private int[] roi;
@@ -615,7 +795,7 @@ public class testHashMap {
 		public int[] getCount() { return count; }
 	}
 	
-	public static RoisFeat findRoiFeat(Integer[][] featinRoi){
+	public RoisFeat findRoiFeat(Integer[][] featinRoi){
 		featinRoi = sort2DInteger(featinRoi);
 		
 		ArrayList<Integer> r = new ArrayList<Integer>();
@@ -654,7 +834,7 @@ public class testHashMap {
 		return new RoisFeat(r1, f, c1);
 	}
 	
-	public static int[] transferArraysToHistogram256(double[] density){
+	public int[] transferArraysToHistogram256(double[] density){
 		Frequency f = new Frequency();
 		int[] p = new int[256];
 		for (int i = 0 ; i < density.length; i++) f.addValue((int) density[i]);
@@ -662,7 +842,7 @@ public class testHashMap {
 		return p;
 	}
 	
-	public static Roi[] findRoiwithFeat(int[] featinRoi, Roi[] rois, int min, int max){
+	public Roi[] findRoiwithFeat(int[] featinRoi, Roi[] rois, int min, int max){
 		Frequency f = new Frequency();
 		for (int i = 0; i < featinRoi.length; i++) f.addValue(featinRoi[i]);
 		String s = f.toString();
@@ -694,7 +874,7 @@ public class testHashMap {
 		return t;
 	}
 	
-	public static int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, int[] density){
+	public int[] findRoiWithMinMaxDensity(Roi[] rois, ArrayList<Integer[]> nb, int[] density){
 		DescriptiveStatistics ds = new DescriptiveStatistics();
 		double[] mdDAB = new double[rois.length];
 		int[] matchedRoi = new int[2];
@@ -720,7 +900,7 @@ public class testHashMap {
 		return matchedRoi;
 	}
 	
-	public static Roi[] removeSmallRoiCluster(Roi[] rois, ArrayList<Integer[]> nb, int nbcount){
+	public Roi[] removeSmallRoiCluster(Roi[] rois, ArrayList<Integer[]> nb, int nbcount){
 		ArrayList<Roi> roistemp = new ArrayList<Roi>();
 		for (int i = 0; i < nb.size(); i++){
 			if (nb.get(i).length > (nbcount + 1)) {
@@ -734,7 +914,7 @@ public class testHashMap {
 		}
 		return rt;
 	}
-	public static Integer[][] sortCenterRoi(Roi[] rois){
+	public Integer[][] sortCenterRoi(Roi[] rois){
 		Integer[][] sy = new Integer[rois.length][2];
 		for (int i = 0; i < rois.length; i++){
 			sy[i][0] = i;
@@ -744,7 +924,7 @@ public class testHashMap {
 		return sy;
 	}
 	
-	public static double[] measureDensity(ImagePlus img, Roi[] rois){
+	public double[] measureDensity(ImagePlus img, Roi[] rois){
 		int options = ImageStatistics.MEDIAN;
 		double[] density = new double[rois.length]; 
 		for (int i = 0; i < rois.length; i++){
@@ -756,7 +936,7 @@ public class testHashMap {
 		return density;
 	}
 	
-	public static ArrayList<Integer[]> findNB(ImagePlus img, Integer[][] sy, Roi[] rois){
+	public ArrayList<Integer[]> findNB(ImagePlus img, Integer[][] sy, Roi[] rois){
 	        int options = ImageStatistics.MIN_MAX;
 	        ImageStatistics stats = new ImageStatistics();
 	        ArrayList<Integer[]> nb = new ArrayList<Integer[]>();
@@ -811,7 +991,7 @@ public class testHashMap {
 	        return nb;
 	    }
 	    
-	public static float[] computeAverageDistancetoOthers(ArrayList<Feature> nFeat){
+	public float[] computeAverageDistancetoOthers(ArrayList<Feature> nFeat){
 		int[] t = new int[nFeat.size()];
 		float[] s = new float[nFeat.size()];
 		for (int k = 0; k < t.length; k++) t[k] = k;
@@ -826,7 +1006,7 @@ public class testHashMap {
 		return s;
 	}
 	
-	public static void computeDescriptorInnerProduct(ArrayList<Feature> nFeat){
+	public void computeDescriptorInnerProduct(ArrayList<Feature> nFeat){
 		for (int i = 0; i < nFeat.size(); i ++){
 			float[] d = nFeat.get(i).descriptor;
 			float s = 0;
@@ -838,7 +1018,7 @@ public class testHashMap {
 		}
 	}
 	
-	public static ArrayList<Integer[]> RoiContainingFeats(int[] featInRois){
+	public ArrayList<Integer[]> RoiContainingFeats(int[] featInRois){
 		Integer[][] FeatRois = new Integer[featInRois.length][2];
 		for (int i = 0; i < featInRois.length; i++) {
 			FeatRois[i][0] = i;
@@ -869,7 +1049,7 @@ public class testHashMap {
 		return RoiContainFeat;
 	}
 	
-	public static ArrayList<Feature> removeFeatbyScale(ArrayList<Feature> feat, float crit){
+	public ArrayList<Feature> removeFeatbyScale(ArrayList<Feature> feat, float crit){
 		ArrayList<Feature> tFeat = new ArrayList<Feature>();
 		ArrayList<Feature> pFeat = new ArrayList<Feature>();
 		for (int i = 0; i < feat.size(); i++) tFeat.add(feat.get(i));
@@ -885,7 +1065,7 @@ public class testHashMap {
 		
 	}
 	
-	public static Integer[][] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){
+	public  Integer[][] findFeatinRoi(ArrayList<Feature> feat, Roi[] rois, Integer[][] sy){
 		int[] featinRoi = new int[feat.size()];
 		ArrayList<Integer> temp = new ArrayList<Integer>();
 		ArrayList<Integer> f = new ArrayList<Integer>();
@@ -943,7 +1123,7 @@ public class testHashMap {
 		return t;
 	}
 	
-	public static Integer[][] sort2DInteger(Integer[][] data){
+	public Integer[][] sort2DInteger(Integer[][] data){
 		Arrays.sort(data, new Comparator<Integer[]>() {
 		    public int compare(Integer[] int1, Integer[] int2) {
 		        Integer numOfKeys1 = int1[1];
@@ -954,7 +1134,7 @@ public class testHashMap {
 		return data;
 	}
 	
-	public static ArrayList<Feature> doSift(ImageProcessor ip){
+	public ArrayList<Feature> doSift(ImageProcessor ip){
 		FloatArray2DSIFT.Param param = new FloatArray2DSIFT.Param();
 		ArrayList<Feature> feat = new ArrayList<Feature>();
 		SIFT si = new SIFT(new FloatArray2DSIFT(param));
@@ -962,7 +1142,7 @@ public class testHashMap {
 		return feat;
 	}
 	
-	public static Roi[] doSlic(ImagePlus img, int area, float fit){
+	public Roi[] doSlic(ImagePlus img, int area, float fit){
 		jSLIC js = new jSLIC(img);
 		js.process(area, fit);
 		Labelling2D ld = js.getSegmentation();
@@ -972,7 +1152,7 @@ public class testHashMap {
 		return rois;
 	}
 	
-	public static ImagePlus cropImg(ImagePlus img2, int x0, int y0, int x1, int y1){
+	public ImagePlus cropImg(ImagePlus img2, int x0, int y0, int x1, int y1){
 		ImageProcessor ip1 = img2.getProcessor();
 		ip1.setRoi(0, 0, 1360, 976);
 		ImageProcessor ip2 = ip1.crop();
@@ -981,7 +1161,7 @@ public class testHashMap {
 		return(img);
 	}
 	
-	public static int[] countFeatureDotbyRoi (Roi[] rois, ImagePlus imgblank, ImageProcessor ipblank ){
+	public int[] countFeatureDotbyRoi (Roi[] rois, ImagePlus imgblank, ImageProcessor ipblank ){
 		int[] roisD = new int[rois.length];
 		long[] r;
 		for (int i = 0; i < rois.length; i++){
@@ -993,7 +1173,7 @@ public class testHashMap {
 		return roisD;
 	}
 	
-	public static Roi[] featureCountExceed(int d, Roi[] rois, int[] roisD){
+	public Roi[] featureCountExceed(int d, Roi[] rois, int[] roisD){
 		ArrayList<Roi> indexes = new ArrayList<Roi>();
 		for (int i = 0; i < rois.length; i++){
 			if (roisD[i] > d) indexes.add(rois[i]);

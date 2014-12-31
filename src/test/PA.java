@@ -23,7 +23,11 @@ public class PA {
 		String path = "/home/hc2008/temp/blank0.tiff";
 		ImagePlus img = IJ.openImage(path);
 		ImagePlus img1 = img.duplicate();
+		
 		IJ.run(img, "Fill Holes","");
+		
+		img.show();
+		img1.show();
 		
 		ImageCalculator ic = new ImageCalculator();
 		
@@ -37,6 +41,8 @@ public class PA {
 		ip.setAutoThreshold(AutoThresholder.Method.Default, false);
 		ip.autoThreshold();
 		*/
+		IJ.run(img, "Convert to Mask", "");
+		
 		ResultsTable rt = new ResultsTable();
 		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.ADD_TO_MANAGER, Measurements.AREA, rt, (double)1, (double)9999999);
 		pa.analyze(img);

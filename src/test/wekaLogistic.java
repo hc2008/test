@@ -14,6 +14,7 @@ import javax.annotation.PostConstruct;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.math3.util.Precision;
+import org.jblas.DoubleMatrix;
 
 import bsh.Capabilities;
 import weka.attributeSelection.ASEvaluation;
@@ -119,6 +120,8 @@ public class wekaLogistic{
         lg.buildClassifier(a);
         for (int i = 1; i < a.numAttributes(); i++) System.out.println(a.attribute(i).name() + "," + lg.coefficients()[i][0]);
             
+        DoubleMatrix dm = new DoubleMatrix();
+        
         
         /*
         AttributeSelectedClassifier classifier = new AttributeSelectedClassifier();

@@ -179,18 +179,39 @@ public class testHashMap {
 		//compare which method has the largest median of ROI area
 		sin = fl.compareScore(sin, rois, img);
 		
+		int[] kindex = sin.getIndex().get(0);
+		
+		for (int i = 0; i < kindex.length; i++){
+			if (kindex[i] == 0){
+				img.getProcessor().setColor(255);
+			}else{img.getProcessor().setColor(0);}
+			img.setRoi(rois[i]);
+			ip.fill(rois[i]);
+		}
+		
+
 		//select attributes and obtain correlation coefficients by logisitc regression
 		//lgData and lgDataName are selected data and their names
 		ArrayList<double[]> lgData = mms;
 		ArrayList<String> lgDataName = mmsName;
 		HashMap<String, Double> lgHM = fl.LogRegression(sin.getIndex().get(0), lgData, lgDataName);
 		for (Object key : lgHM.keySet())  System.out.println(key + " : " + lgHM.get(key));
+		
 		img.setRoi(sin.getAreaRoi().get(0).getRoi()[0]);
 		ip.fill(sin.getAreaRoi().get(0).getRoi()[0]);
+		img.updateAndDraw();
+		img.show();
+		
+		rm.reset();
+		rm.addRoi(sin.getAreaRoi().get(0).getRoi()[0]);
+		rm.addRoi(sin.getAreaRoi().get(0).getRoi()[1]);
+		rm.setVisible(true);
+		/*
 		img.setRoi(sin.getAreaRoi().get(0).getRoi()[1]);
 		ip.fill(sin.getAreaRoi().get(0).getRoi()[1]);
 		img.updateAndDraw();
-		
+		img.show();
+		*/
 		
 		
 		//nM[0] roi with the minimal mean (including neighbor roi) of median density of DAB, nM[1] the maximum
@@ -592,6 +613,7 @@ public class testHashMap {
 	public double findM(float[] b){
 		Median m = new Median();
 		double[] c = new double[b.length];
+		System.out.println(c);
 		for (int i = 0; i < c.length; i++) c[i] = (double) b[i];
 		return m.evaluate(c);
 	}
@@ -616,19 +638,21 @@ public class testHashMap {
 	
 	public AreaRoi findAreaAndRoi(ImagePlus img, Roi[] rois, int[] index){
 		Roi[] maxArea = new Roi[2];
+		
 		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
-		imgblank = paintRoiByIndex(imgblank, rois, index, 1);
-		
-		ImagePlus imgblank1 = paintRoiByIndex(imgblank, rois, index, 0);
 		ResultsTable rt = new ResultsTable();
-	
 		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.SHOW_NONE, Measurements.AREA, rt, (double)1, (double)9999999);
-		pa.analyze(imgblank);
-		pa.analyze(imgblank1);
-		
-		//maxArea[0] for index = 0, maxArea[1] for index = 0 
-		maxArea[1] = findLargeAreaWithoutHole(imgblank);
-		maxArea[0] = findLargeAreaWithoutHole(imgblank1);
+				
+		for (int i = 0; i < 2; i ++){
+			ImagePlus temp = paintRoiByIndex(imgblank, rois, index, i);
+			IJ.run(temp, "Make Binary", "");
+			System.out.println(temp.isInvertedLut() + "," + temp.getProcessor().isBinary());
+			
+			pa.analyze(temp);
+			temp.duplicate().show();
+			maxArea[i] = findLargeAreaWithoutHole(temp);
+			temp.close();
+		}
 		
 		float[] area = rt.getColumn(0);
 		
@@ -639,44 +663,66 @@ public class testHashMap {
 			
 	}
 	
-	public ImagePlus paintRoiByIndex(ImagePlus imgblank, Roi[]rois, int[] index, int c){
+	public ImagePlus paintRoiByIndex(ImagePlus imgblank, Roi[] rois, int[] index, int c){
 		ImageProcessor ipblank = imgblank.getProcessor();
+		ipblank.setBackgroundValue(255);
+		
+		ipblank.setColor(0);
 		for (int i = 0; i < rois.length; i++){
 			imgblank.setRoi(rois[i]);
-			if (index[i] == c) ipblank.fill(rois[i]);
-			ipblank.dilate();
-			imgblank.killRoi();
+			if (index[i] == c) {
+				ipblank.fill(rois[i]);
+				ipblank.dilate();
+				imgblank.killRoi();
+			}
+			
 		}
+		
 		ipblank.erode();
 		imgblank.updateAndDraw();
+						
 		return imgblank;
 	}
 	
-	public Roi findLargeAreaWithoutHole(ImagePlus imgblank){
+	public Roi findLargeAreaWithoutHole(ImagePlus impblank){
+		//ImagePlus temp = IJ.createImage("blank", "8-bit white", tempimg.getWidth(), tempimg.getHeight(), 1);
+		//ImagePlus impblank = new ImagePlus();
+		//impblank = paintRoiByIndex(temp, rois, index, c);
+		//impblank.show();
 		HashMap<Double, Roi> areaRoi = new HashMap<Double, Roi>();
 		DescriptiveStatistics ds= new DescriptiveStatistics();
 		ImageStatistics is = new ImageStatistics();
 		ResultsTable rt = new ResultsTable();
+
+		ImagePlus imga = impblank.duplicate();
+		
 		ParticleAnalyzer pa =  new ParticleAnalyzer(ParticleAnalyzer.ADD_TO_MANAGER, Measurements.AREA, rt, (double)1, (double)9999999);
-		ImagePlus imga = imgblank.duplicate();
-		IJ.run(imgblank, "Fill Holes","");
+		
+		IJ.run(impblank, "Fill Holes","");
 		RoiManager rm = RoiManager.getInstance();
+		rm.setVisible(true);
 		rm.reset();
-		pa.analyze(imgblank);
+		IJ.run(impblank, "Make Binary", "");
+		pa.analyze(impblank);
 		Roi[] r = rm.getRoisAsArray();
 
 		ImageCalculator ic = new ImageCalculator();
-		ImagePlus imgb = ic.run("Difference create", imga, imgblank);
+		ImagePlus imgb = ic.run("Difference create", imga, impblank);
 		
-		for (int i = 0; i < r.length; i++){
-			imgb.setRoi(r[i]);
+		
+		for (Roi roi:r){
+			imgb.setRoi(roi);
 			is = imgb.getStatistics();
 			double m = is.mean;
 			if (m == 0 || m == 255) {
-				areaRoi.put(is.area, r[i]);
+				areaRoi.put(is.area, roi);
 				ds.addValue(is.area);
 			}
 		}
+		
+		System.out.println(ds.getMax());
+		System.out.println(areaRoi.get(ds.getMax()));
+		
 		return areaRoi.get(ds.getMax());
 	}
 	

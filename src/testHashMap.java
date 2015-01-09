@@ -179,8 +179,60 @@ public class testHashMap {
 		//compare which method has the largest median of ROI area
 		sin = fl.compareScore(sin, rois, img);
 		
+	
 		int[] kindex = sin.getIndex().get(0);
 		
+		ArrayList<ArrayList<Roi>> r = new ArrayList<ArrayList<Roi>>();
+        for (int i = 0; i< 2; i++) r.add(new ArrayList<Roi>());
+        for (int i = 0; i < kindex.length; i++){
+            r.get(kindex[i]).add(rois[i]);
+        }
+        
+        ArrayList<Roi[]> r1 = new ArrayList<Roi[]>();
+        for (int i = 0; i< 2; i++) r1.add(new Roi[r.get(i).size()]);
+        for (int i = 0; i <2; i++) {
+            for (int j = 0; j < r1.get(i).length; j++) r1.get(i)[j] = r.get(i).get(j);
+        }
+        
+        ArrayList<ArrayList<Integer[]>> n = new ArrayList<ArrayList<Integer[]>>();
+        for (int i = 0; i< 2; i++) n.add(new ArrayList<Integer[]>());
+        for (int i = 0; i < 2; i++) {
+            n.get(i).addAll(fl.findNB(img, fl.sortCenterRoi(r1.get(i)), r1.get(i)));
+        }
+		
+		ArrayList<HashMap<Integer, Integer[]>> m = new ArrayList<HashMap<Integer, Integer[]>>();
+		for (int i = 0; i< 2; i++) m.add(new HashMap<Integer, Integer[]>());
+		for (int i = 0; i < 2; i++) {
+			for (int j= 0; j < n.get(i).size(); j++){
+				Integer[] v = ArrayUtils.remove(n.get(i).get(j), 0);
+				m.get(i).put(n.get(i).get(j)[0], v);
+			}
+		}
+		
+		ArrayList<ArrayList<Roi[]>> ro = new ArrayList<ArrayList<Roi[]>>();
+		for (int i = 0; i< 2; i++) ro.add(new ArrayList<Roi[]>());
+		for (int i = 0; i< 2; i++){
+			ArrayList<Roi> ri = new ArrayList<Roi>();
+			while (m.get(i).size() > 0){
+				
+			}
+		}
+		
+		
+		//fl.findLargestRoi(img, rois, kindex);
+		/*
+		Roi roi0 = fl.findLargestRoi(fl.paintRoiByIndex(img, rois, kindex, 0));
+		Roi roi1 = fl.findLargestRoi(fl.paintRoiByIndex(img, rois, kindex, 1));
+		
+		img.setRoi(roi0);
+		ip.setColor(255);
+		ip.fill(roi0);
+		
+		img.setRoi(roi1);
+		ip.setColor(0);
+		ip.fill(roi1);
+		*/
+		/*
 		for (int i = 0; i < kindex.length; i++){
 			if (kindex[i] == 0){
 				img.getProcessor().setColor(255);
@@ -188,7 +240,9 @@ public class testHashMap {
 			img.setRoi(rois[i]);
 			ip.fill(rois[i]);
 		}
+		*/
 		
+
 
 		//select attributes and obtain correlation coefficients by logisitc regression
 		//lgData and lgDataName are selected data and their names
@@ -197,6 +251,8 @@ public class testHashMap {
 		HashMap<String, Double> lgHM = fl.LogRegression(sin.getIndex().get(0), lgData, lgDataName);
 		for (Object key : lgHM.keySet())  System.out.println(key + " : " + lgHM.get(key));
 		
+		
+		/*
 		img.setRoi(sin.getAreaRoi().get(0).getRoi()[0]);
 		ip.fill(sin.getAreaRoi().get(0).getRoi()[0]);
 		img.updateAndDraw();
@@ -206,7 +262,7 @@ public class testHashMap {
 		rm.addRoi(sin.getAreaRoi().get(0).getRoi()[0]);
 		rm.addRoi(sin.getAreaRoi().get(0).getRoi()[1]);
 		rm.setVisible(true);
-		/*
+		
 		img.setRoi(sin.getAreaRoi().get(0).getRoi()[1]);
 		ip.fill(sin.getAreaRoi().get(0).getRoi()[1]);
 		img.updateAndDraw();
@@ -390,6 +446,35 @@ public class testHashMap {
 	}
 	
 	public testHashMap(){
+		
+	}
+	
+	public void findLargestRoi(ImagePlus img, Roi[] rois, int[] index ){
+		 
+		ArrayList<Roi> rois0 = new ArrayList<Roi>();
+		ArrayList<Roi> rois1 = new ArrayList<Roi>();
+		for (int i = 0; i < index.length; i++){
+			if (index[i] == 0) {
+				rois0.add(rois[i]);
+			}else{
+				rois1.add(rois[i]);
+			}
+		}
+		
+		Roi[] r0 = new Roi[rois0.size()];
+		Roi[] r1 = new Roi[rois1.size()];
+		
+		for (int i = 0; i < r0.length; i++) r0[i] = rois0.get(i);
+		for (int i = 0; i < r1.length; i++) r1[i] = rois1.get(i);
+		
+		Integer[][] sy0 = sortCenterRoi(r0) ;
+	
+		ArrayList<Integer[]> nb0 = findNB(img, sy0, r0);
+		
+		Integer[][] sy1 = sortCenterRoi(r1) ;
+		ArrayList<Integer[]> nb1 = findNB(img, sy1, r1);
+		
+		
 		
 	}
 	
@@ -646,10 +731,10 @@ public class testHashMap {
 		for (int i = 0; i < 2; i ++){
 			ImagePlus temp = paintRoiByIndex(imgblank, rois, index, i);
 			IJ.run(temp, "Make Binary", "");
-			System.out.println(temp.isInvertedLut() + "," + temp.getProcessor().isBinary());
+			//System.out.println(temp.isInvertedLut() + "," + temp.getProcessor().isBinary());
 			
 			pa.analyze(temp);
-			temp.duplicate().show();
+			//temp.duplicate().show();
 			maxArea[i] = findLargeAreaWithoutHole(temp);
 			temp.close();
 		}
@@ -663,7 +748,8 @@ public class testHashMap {
 			
 	}
 	
-	public ImagePlus paintRoiByIndex(ImagePlus imgblank, Roi[] rois, int[] index, int c){
+	public ImagePlus paintRoiByIndex(ImagePlus img, Roi[] rois, int[] index, int c){
+		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
 		ImageProcessor ipblank = imgblank.getProcessor();
 		ipblank.setBackgroundValue(255);
 		
@@ -713,8 +799,8 @@ public class testHashMap {
 		for (Roi roi:r){
 			imgb.setRoi(roi);
 			is = imgb.getStatistics();
-			double m = is.mean;
-			if (m == 0 || m == 255) {
+			//double m = is.mean;
+			if (is.histogram[0] + is.histogram[255] == is.pixelCount) {
 				areaRoi.put(is.area, roi);
 				ds.addValue(is.area);
 			}

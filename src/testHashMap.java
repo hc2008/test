@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +27,7 @@ import org.python.google.common.collect.Multimap;
 
 import ij.*;
 import ij.gui.Roi;
+import ij.gui.ShapeRoi;
 import ij.measure.Measurements;
 import ij.measure.ResultsTable;
 import ij.plugin.ImageCalculator;
@@ -78,17 +80,6 @@ public class testHashMap {
 		//apply SIFT to obtain feature points
 		ArrayList<Feature> feat = fl.doSift(ip);
 		
-		/*
-		ImagePlus imgblank = IJ.createImage("blank", "8-bit white", img.getWidth(), img.getHeight(), 1);
-		imgblank.show();
-		IJ.run("Make Binary","");
-		imgblank.hide();
-		ImageProcessor ipblank = imgblank.getProcessor();
-		ipblank.setColor(new Color(0));
-		for (int i = 0; i < feat.size(); i++) ipblank.drawOval((int) feat.get(i).location[0], (int) feat.get(i).location[1], 2,2);
-		imgblank.updateAndDraw();
-		imgblank.show();
-		*/
 		//ArrayList<Feature> nFeat = removeFeatbyScale(feat,6.0F);
 		
 		//apply SLIC to obtain array of ROI
@@ -159,6 +150,7 @@ public class testHashMap {
 		Colour_Deconvolution cdr = new Colour_Deconvolution(); 
 		ArrayList<ImagePlus> S = cdr.run(img);
 		
+			
 		//construct a class with name of method, score, index (0/1 for a certain criteria) and roi array
 		
 		ScoreIndexName sin = fl.initScoreIndexName();
@@ -181,42 +173,25 @@ public class testHashMap {
 		
 	
 		int[] kindex = sin.getIndex().get(0);
+		//find the Roi collection with largest area in sum by kindex = 0 or 1 
+		ShapeRoi[] areaMaxRois = fl.returnMaxGroupRoi(kindex, rois, img);
+
 		
-		ArrayList<ArrayList<Roi>> r = new ArrayList<ArrayList<Roi>>();
-        for (int i = 0; i< 2; i++) r.add(new ArrayList<Roi>());
-        for (int i = 0; i < kindex.length; i++){
-            r.get(kindex[i]).add(rois[i]);
-        }
-        
-        ArrayList<Roi[]> r1 = new ArrayList<Roi[]>();
-        for (int i = 0; i< 2; i++) r1.add(new Roi[r.get(i).size()]);
-        for (int i = 0; i <2; i++) {
-            for (int j = 0; j < r1.get(i).length; j++) r1.get(i)[j] = r.get(i).get(j);
-        }
-        
-        ArrayList<ArrayList<Integer[]>> n = new ArrayList<ArrayList<Integer[]>>();
-        for (int i = 0; i< 2; i++) n.add(new ArrayList<Integer[]>());
-        for (int i = 0; i < 2; i++) {
-            n.get(i).addAll(fl.findNB(img, fl.sortCenterRoi(r1.get(i)), r1.get(i)));
-        }
-		
-		ArrayList<HashMap<Integer, Integer[]>> m = new ArrayList<HashMap<Integer, Integer[]>>();
-		for (int i = 0; i< 2; i++) m.add(new HashMap<Integer, Integer[]>());
-		for (int i = 0; i < 2; i++) {
-			for (int j= 0; j < n.get(i).size(); j++){
-				Integer[] v = ArrayUtils.remove(n.get(i).get(j), 0);
-				m.get(i).put(n.get(i).get(j)[0], v);
+		for (int z = 0; z < 2; z++){
+			ip.setColor(128 * z);
+			img.setRoi(areaMaxRois[z]);
+			ip.fill(areaMaxRois[z]);
+			/*
+			System.out.println(areaMaxRoi.get(z).length);
+		for (Roi i:areaMaxRoi.get(z)){
+				img.setRoi(i);
+				ip.fill(i);
 			}
+			*/
 		}
+		img.updateAndDraw();
+		img.show();
 		
-		ArrayList<ArrayList<Roi[]>> ro = new ArrayList<ArrayList<Roi[]>>();
-		for (int i = 0; i< 2; i++) ro.add(new ArrayList<Roi[]>());
-		for (int i = 0; i< 2; i++){
-			ArrayList<Roi> ri = new ArrayList<Roi>();
-			while (m.get(i).size() > 0){
-				
-			}
-		}
 		
 		
 		//fl.findLargestRoi(img, rois, kindex);
@@ -250,6 +225,23 @@ public class testHashMap {
 		ArrayList<String> lgDataName = mmsName;
 		HashMap<String, Double> lgHM = fl.LogRegression(sin.getIndex().get(0), lgData, lgDataName);
 		for (Object key : lgHM.keySet())  System.out.println(key + " : " + lgHM.get(key));
+		
+		HashMap<Integer, String> Stitle = new HashMap<Integer, String>();
+		for (int i = 0; i < S.size(); i++) Stitle.put(i, S.get(i).getTitle());
+		
+		
+			ImageStatistics is = new ImageStatistics();
+			double sum = 0;
+			for (ImagePlus i: S){	
+			i.show();	
+			i.setRoi(areaMaxRois[1]);
+			is = i.getStatistics();
+			System.out.println(lgHM.get(i.getTitle()));
+			sum = sum + is.median * lgHM.get(i.getTitle());
+			}
+			
+			System.out.println(sum);
+		
 		
 		
 		/*
@@ -446,6 +438,129 @@ public class testHashMap {
 	}
 	
 	public testHashMap(){
+		
+	}
+	
+	
+	public ShapeRoi[] returnMaxGroupRoi(int[] kindex, Roi[] rois, ImagePlus img){
+		
+		//construct the ROI arrayList to store ROI belonged to kindex = 0 or 1
+		ArrayList<ArrayList<Roi>> r = new ArrayList<ArrayList<Roi>>();
+        for (int i = 0; i< 2; i++) r.add(new ArrayList<Roi>());
+        for (int i = 0; i < kindex.length; i++){
+            r.get(kindex[i]).add(rois[i]);
+        }
+        
+        //turn ArrayList of ROI to Roi[] 
+        ArrayList<Roi[]> r1 = new ArrayList<Roi[]>();
+        for (int i = 0; i< 2; i++) r1.add(new Roi[r.get(i).size()]);
+        for (int i = 0; i <2; i++) {
+            for (int j = 0; j < r1.get(i).length; j++) r1.get(i)[j] = r.get(i).get(j);
+        }
+        
+        // find ArrayList of int[] to store index Roi (first element) with its neighbors.
+        ArrayList<ArrayList<int[]>> n = new ArrayList<ArrayList<int[]>>();
+        for (int i = 0; i< 2; i++) n.add(new ArrayList<int[]>());
+        for (int i = 0; i < 2; i++) {
+        	ArrayList<Integer[]> nt = findNB(img, sortCenterRoi(r1.get(i)), r1.get(i));
+        	ArrayList<int[]> ns = new ArrayList<int[]>();
+        	for (Integer[] k : nt) {
+        		int[] kr = new int [k.length]; 
+        		for (int ki = 0; ki < kr.length; ki++) kr[ki] = k[ki];
+        		ns.add(kr);
+        	}
+            n.get(i).addAll(ns);
+        }
+		
+        //construct HashMap with the first element as key and the rest of its neighbors as values
+		ArrayList<HashMap<Integer, int[]>> m = new ArrayList<HashMap<Integer, int[]>>();
+		for (int i = 0; i< 2; i++) m.add(new HashMap<Integer, int[]>());
+		for (int i = 0; i < 2; i++) {
+			for (int j= 0; j < n.get(i).size(); j++){
+				int[] v = ArrayUtils.remove(n.get(i).get(j), 0);
+				m.get(i).put(n.get(i).get(j)[0], v);
+			}
+		}
+		
+		//use ArrayList of int[] to store Rois in groups 
+		ArrayList<ArrayList<int[]>> group = new ArrayList<ArrayList<int[]>>();
+		for (int i = 0; i< 2; i++) group.add(new ArrayList<int[]>());
+		for (int i = 0; i< 2; i++) recurse(m.get(i), group.get(i));
+		
+		//find the group with the largest area in sum
+		ArrayList<Roi[]> areaMaxRoi = new ArrayList<Roi[]>();
+		for (int i = 0; i < 2; i++){
+			double ar = 0;
+			double arm = 0;
+			int ari = 0;
+			ImageStatistics is = new ImageStatistics();
+			for (int j = 0; j < group.get(i).size(); j++){
+				int[] im = group.get(i).get(j);
+				for (int k: im){
+					img.setRoi(r.get(i).get(k));
+					is = img.getStatistics();
+					ar = ar + is.area;
+				}
+				if (ar > arm) {
+					arm = ar;
+					ari = j;
+				}
+				ar = 0;
+			}
+			Roi[] aro = new Roi[group.get(i).get(ari).length];
+			for (int p = 0; p < aro.length; p++) aro[p] = r.get(i).get(group.get(i).get(ari)[p]);
+			areaMaxRoi.add(aro);
+		}
+		
+		//use the ShapeRoi to present the collection of Roi with the largest area in sum
+		ShapeRoi[] sr = new ShapeRoi[2];
+		
+		for (int i = 0; i < 2; i++) {
+			Roi[] st = areaMaxRoi.get(i);
+			sr[i] = new ShapeRoi(st[0]);
+			for (int j = 1; j < st.length; j++) sr[i].or(new ShapeRoi(st[j]));
+		}
+		
+		return sr;
+	}
+	
+	// recurse use JAVA recursive call to process arrayAdd until the length of HashMap h is set to zero
+	public HashMap<Integer, int[]> recurse(HashMap<Integer, int[]> h, ArrayList<int[]> group){
+		int[] y;
+		int x = h.keySet().iterator().next();
+		int[] v = h.get(x);
+		if (v.length > 0){
+		y = arrayAdd(v, h, 0);
+		}else{
+		y = new int[1];
+		y[0] = x;
+		}
+		group.add(y);
+		for (int i: y) h.remove(i);
+		if (!h.isEmpty()){	
+			h = recurse(h, group);
+		}
+		return h;
+		
+		
+	}
+	
+	// arrayAdd use JAVA recursive call to find and add all Rois in a specific group
+	public static int[] arrayAdd(int[] a1, HashMap<Integer, int[]> h, int s){
+		HashSet<Integer> a = new HashSet<Integer>();
+		for (int i: a1) a.add(i);
+		for (int i: a1){
+			for (int j: h.get(i)){
+				a.add(j);
+			}
+		}
+		
+		int[] p = new int[a.size()];
+		int m = 0;
+		for (Integer i : a) p[m++] = i; 
+		int s1 = a.size();
+		if (a.size() != s) p = arrayAdd(p, h, s1);
+		return p;
 		
 	}
 	
